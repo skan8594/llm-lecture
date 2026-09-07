@@ -1,0 +1,6 @@
+{
+  "name": "신입사원 LLM 생산성 코드 대시보드",
+  "description": "90명 신입사원 대상 15개 조별 LLM 업무 생산성 활동 및 대표 발표 대시보드, 실시간 모바일 코드 제출 및 상호 투표 (GitHub Pages 정적 서빙 완벽 호환)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
