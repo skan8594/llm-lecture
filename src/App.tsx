@@ -4,21 +4,22 @@
  */
 
 import React, { useState, useEffect, useCallback, useId, useRef } from 'react';
-import { CodeSubmission, TrainingSessionConfig, TeamActivity, ProductivityCategory } from './types';
+import { CodeSubmission, TrainingSessionConfig, TeamActivity, ProductivityCategory, SampleDataset } from './types';
 import { PresenterDashboard } from './components/PresenterDashboard';
 import { ParticipantTeamView } from './components/ParticipantTeamView';
 import { SubmissionModal } from './components/SubmissionModal';
 import { TeamPresentationStage } from './components/TeamPresentationStage';
-import { INITIAL_15_TEAMS, INITIAL_SUBMISSIONS } from './data/teamData';
+import { INITIAL_15_TEAMS, INITIAL_SUBMISSIONS, createDefaultTeam } from './data/teamData';
+import { getInitialDatasets } from './data/sampleDatasets';
 import { Users, Laptop, ArrowRight, ExternalLink, Sparkles } from 'lucide-react';
 
 // Helper to parse team from URL:
 // ?team=0 -> Presenter (강사용)
-// ?team=1 ~ ?team=15 -> Participant (1조 ~ 15조 교육생)
+// ?team=1, 2, ... -> Participant (1조, 2조, ...)
 // /team0 -> Presenter
-// /team1 ~ /team15 -> Participant
+// /team1, /team2, ... -> Participant
 // #team0 -> Presenter
-// #team1 ~ #team15 -> Participant
+// #team1, #team2, ... -> Participant
 function parseTeamFromLocation(): number | null {
   if (typeof window === 'undefined') return 0;
 
@@ -28,21 +29,21 @@ function parseTeamFromLocation(): number | null {
   if (teamParam !== null) {
     const clean = teamParam.toLowerCase().replace('team', '').replace('조', '');
     const num = parseInt(clean, 10);
-    if (!isNaN(num) && num >= 0 && num <= 15) return num;
+    if (!isNaN(num) && num >= 0) return num;
   }
 
-  // 2. Pathname /team0 ... /team15
-  const pathMatch = window.location.pathname.match(/\/team([0-9]|1[0-5])(?:\/|$)/i);
+  // 2. Pathname /team0 ... /team99
+  const pathMatch = window.location.pathname.match(/\/team(\d+)(?:\/|$)/i);
   if (pathMatch) {
     const num = parseInt(pathMatch[1], 10);
-    if (!isNaN(num) && num >= 0 && num <= 15) return num;
+    if (!isNaN(num) && num >= 0) return num;
   }
 
-  // 3. Hash #team0 ... #team15
-  const hashMatch = window.location.hash.match(/#team([0-9]|1[0-5])(?:\/|$)/i);
+  // 3. Hash #team0 ... #team99
+  const hashMatch = window.location.hash.match(/#team(\d+)(?:\/|$)/i);
   if (hashMatch) {
     const num = parseInt(hashMatch[1], 10);
-    if (!isNaN(num) && num >= 0 && num <= 15) return num;
+    if (!isNaN(num) && num >= 0) return num;
   }
 
   return null;
@@ -69,7 +70,15 @@ export default function App() {
 
   // Submissions state with LocalStorage persistence for GitHub Pages static environment
   const [submissions, setSubmissions] = useState<CodeSubmission[]>(() => {
-    const cached = localStorage.getItem('llm_hackathon_v2_submissions');
+    // Clear legacy keys if present
+    try {
+      localStorage.removeItem('llm_hackathon_v2_submissions');
+      localStorage.removeItem('llm_hackathon_v2_teams');
+      localStorage.removeItem('llm_hackathon_submissions_data');
+      localStorage.removeItem('llm_hackathon_teams_data');
+    } catch (e) {}
+
+    const cached = localStorage.getItem('semiconductor_mfg_v1_submissions');
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
@@ -79,9 +88,9 @@ export default function App() {
     return INITIAL_SUBMISSIONS;
   });
 
-  // 15 Teams state with LocalStorage persistence
+  // Teams state with LocalStorage persistence
   const [teams, setTeams] = useState<TeamActivity[]>(() => {
-    const cached = localStorage.getItem('llm_hackathon_v2_teams');
+    const cached = localStorage.getItem('semiconductor_mfg_v1_teams');
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
@@ -91,10 +100,34 @@ export default function App() {
     return INITIAL_15_TEAMS;
   });
 
+  // Semiconductor Sample Datasets state with LocalStorage persistence & server sync
+  const [datasets, setDatasets] = useState<SampleDataset[]>(() => {
+    const defaults = getInitialDatasets();
+    const cachedV2 = localStorage.getItem('semiconductor_mfg_v2_datasets');
+    if (cachedV2) {
+      try {
+        const parsed = JSON.parse(cachedV2);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    const cachedV1 = localStorage.getItem('semiconductor_mfg_v1_datasets');
+    if (cachedV1) {
+      try {
+        const parsed = JSON.parse(cachedV1);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const defaultIds = new Set(defaults.map((d) => d.id));
+          const customAdded = parsed.filter((item: SampleDataset) => !defaultIds.has(item.id) && !item.id.startsWith('dataset-wafer-defect'));
+          return [...defaults, ...customAdded];
+        }
+      } catch (e) {}
+    }
+    return defaults;
+  });
+
   const [sessionConfig, setSessionConfig] = useState<TrainingSessionConfig>({
     totalTargetTeams: 15,
-    trainingTitle: '2026 신입사원 LLM 생산성 극대화 해커톤 & 15개 조별 발표회',
-    instructorName: 'AI 교육 디렉터',
+    trainingTitle: '반도체 제조 혁신 LLM 생산성 극대화 발표회',
+    instructorName: '반도체 AI 디렉터',
     isVotingOpen: true,
     submissionDeadlineMinutes: 30,
     sessionStartTime: Date.now(),
@@ -115,15 +148,33 @@ export default function App() {
   // Persist teams and submissions to localStorage for GitHub Pages compatibility
   useEffect(() => {
     try {
-      localStorage.setItem('llm_hackathon_v2_submissions', JSON.stringify(submissions));
+      localStorage.setItem('semiconductor_mfg_v1_submissions', JSON.stringify(submissions));
     } catch (e) {}
   }, [submissions]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('llm_hackathon_v2_teams', JSON.stringify(teams));
+      localStorage.setItem('semiconductor_mfg_v1_teams', JSON.stringify(teams));
     } catch (e) {}
   }, [teams]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('semiconductor_mfg_v2_datasets', JSON.stringify(datasets));
+    } catch (e) {}
+  }, [datasets]);
+
+  // Sync datasets from server on load if available
+  useEffect(() => {
+    fetch('/api/datasets')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.datasets && Array.isArray(data.datasets) && data.datasets.length > 0) {
+          setDatasets(data.datasets);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Sync with browser navigation & URL changes
   useEffect(() => {
@@ -338,16 +389,16 @@ export default function App() {
   const handleSubmitSubmission = async (newSubData: Partial<CodeSubmission>): Promise<boolean> => {
     const newSubmission: CodeSubmission = {
       id: 'sub-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6),
-      title: newSubData.title || '신규 제출 과제',
-      category: (newSubData.category as ProductivityCategory) || 'excel_automation',
-      department: newSubData.department || '신입사원',
-      authorName: newSubData.authorName || '신입 교육생',
+      title: newSubData.title || '신규 반도체 개선 과제',
+      category: (newSubData.category as ProductivityCategory) || 'yield_defect',
+      department: newSubData.department || '공정기술팀',
+      authorName: newSubData.authorName || '제조혁신 엔지니어',
       employeeId: newSubData.employeeId || '2026' + Math.floor(1000 + Math.random() * 9000),
       team: newSubData.team || '1조',
       language: (newSubData.language as any) || 'javascript',
       code: newSubData.code || '',
       promptUsed: newSubData.promptUsed || '',
-      productivityImpact: newSubData.productivityImpact || '업무 처리 시간 단축',
+      productivityImpact: newSubData.productivityImpact || '수율 개선 및 분석 시간 단축',
       sampleInput: newSubData.sampleInput || '',
       submittedAt: Date.now(),
       votes: 0,
@@ -400,6 +451,24 @@ export default function App() {
     return true;
   };
 
+  // Update Team Planning Info (from Participant Team View Tab 1)
+  const handleUpdateTeamInfo = (teamNum: number, updatedFields: Partial<TeamActivity>) => {
+    setTeams((prev) => {
+      const existingIdx = prev.findIndex((t) => t.teamNumber === teamNum);
+      if (existingIdx !== -1) {
+        const copy = [...prev];
+        copy[existingIdx] = { ...copy[existingIdx], ...updatedFields };
+        return copy;
+      } else {
+        const newTeam: TeamActivity = {
+          ...createDefaultTeam(teamNum),
+          ...updatedFields,
+        };
+        return [...prev, newTeam];
+      }
+    });
+  };
+
   // Admin: Toggle Voting Status
   const handleToggleVoting = async () => {
     setSessionConfig((prev) => ({ ...prev, isVotingOpen: !prev.isVotingOpen }));
@@ -413,6 +482,8 @@ export default function App() {
     if (window.confirm('모든 제출물과 점수를 초기화하고 첫 화면 상태로 리셋하시겠습니까?')) {
       setSubmissions(INITIAL_SUBMISSIONS);
       setTeams(INITIAL_15_TEAMS);
+      localStorage.removeItem('semiconductor_mfg_v1_submissions');
+      localStorage.removeItem('semiconductor_mfg_v1_teams');
       localStorage.removeItem('llm_hackathon_v2_submissions');
       localStorage.removeItem('llm_hackathon_v2_teams');
       localStorage.removeItem('llm_hackathon_submissions_data');
@@ -423,6 +494,52 @@ export default function App() {
         await fetch('/api/admin/reset', { method: 'POST' });
       } catch (e) {}
     }
+  };
+
+  // Instructor: Add new CSV Dataset
+  const handleAddDataset = async (newDatasetData: Omit<SampleDataset, 'id' | 'uploadedAt'>) => {
+    const localId = `dataset-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const localItem: SampleDataset = {
+      ...newDatasetData,
+      id: localId,
+      uploadedAt: Date.now(),
+    };
+    setDatasets((prev) => [localItem, ...prev]);
+
+    try {
+      const res = await fetch('/api/datasets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newDatasetData),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.dataset) {
+          setDatasets((prev) => prev.map((d) => (d.id === localId ? data.dataset : d)));
+        }
+      }
+    } catch (err) {
+      console.warn('Dataset API sync fallback:', err);
+    }
+  };
+
+  // Instructor: Delete Dataset
+  const handleDeleteDataset = async (id: string) => {
+    setDatasets((prev) => prev.filter((d) => d.id !== id));
+    try {
+      await fetch(`/api/datasets/${id}`, { method: 'DELETE' });
+    } catch (err) {
+      console.warn('Dataset delete API fallback:', err);
+    }
+  };
+
+  // Instructor: Reset Datasets to initial semiconductor sample datasets
+  const handleResetDatasets = async () => {
+    const defaults = getInitialDatasets();
+    setDatasets(defaults);
+    try {
+      await fetch('/api/datasets/reset', { method: 'POST' });
+    } catch (err) {}
   };
 
   // Export JSON for GitHub Pages offline/static backup
@@ -501,6 +618,10 @@ export default function App() {
         <PresenterDashboard
           teams={teams}
           submissions={submissions}
+          datasets={datasets}
+          onAddDataset={handleAddDataset}
+          onDeleteDataset={handleDeleteDataset}
+          onResetDatasets={handleResetDatasets}
           onSelectSubmission={(sub) => setSelectedSubmission(sub)}
           onVote={handleVote}
           onVoteTeam={handleScoreTeam}
@@ -512,26 +633,21 @@ export default function App() {
           onExportJson={handleExportJson}
           onImportJson={handleImportJson}
         />
-      ) : currentTeamNumber !== null && currentTeamNumber >= 1 && currentTeamNumber <= 15 ? (
+      ) : currentTeamNumber !== null && currentTeamNumber >= 1 ? (
         <ParticipantTeamView
           teamNumber={currentTeamNumber}
           team={
-            teams.find((t) => t.teamNumber === currentTeamNumber) || {
-              id: `team-${currentTeamNumber}`,
-              teamNumber: currentTeamNumber,
-              teamName: `${currentTeamNumber}조`,
-              category: 'excel_automation',
-              members: [`${currentTeamNumber}조 팀원`],
-              totalTeamVotes: 0,
-              presentationStatus: 'waiting',
-            }
+            teams.find((t) => t.teamNumber === currentTeamNumber) ||
+            createDefaultTeam(currentTeamNumber)
           }
           submissions={submissions}
+          datasets={datasets}
           onSubmit={handleSubmitSubmission}
           onVote={handleVote}
           votedIds={votedIds}
           isVotingOpen={sessionConfig.isVotingOpen}
           onSelectSubmission={(sub) => setSelectedSubmission(sub)}
+          onUpdateTeamInfo={(fields) => handleUpdateTeamInfo(currentTeamNumber, fields)}
         />
       ) : (
         /* Team Selection Gateway (when no team is specified in URL) */
@@ -543,7 +659,7 @@ export default function App() {
                 <span>팀별 전용 URL 분리 시스템</span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                2026 신입사원 LLM 생산성 해커톤
+                반도체 제조 혁신 LLM 생산성 해커톤
               </h1>
               <p className="text-xs sm:text-sm text-slate-400 max-w-lg mx-auto">
                 접속하실 조(팀) 또는 강사용 종합 대시보드를 선택해주세요.
@@ -570,7 +686,7 @@ export default function App() {
                     </span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    전체 15개 조 실시간 현황, 랭킹, 발표 모드, 투표 제어
+                    전체 팀 실시간 현황, 랭킹, 발표 모드, 투표 제어
                   </p>
                 </div>
               </div>
@@ -580,10 +696,10 @@ export default function App() {
               </div>
             </div>
 
-            {/* 15 Teams Selection Grid */}
+            {/* Teams Selection Grid */}
             <div className="space-y-2">
               <h3 className="text-xs font-bold text-slate-400 px-1">
-                15개 조별 교육생 워크스페이스 (team1 ~ team15)
+                팀별 교육생 워크스페이스
               </h3>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
@@ -601,7 +717,7 @@ export default function App() {
                     </div>
                     <div>
                       <p className="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors truncate">
-                        {t.teamNumber}조
+                        제 {t.teamNumber} 조
                       </p>
                       <p className="text-[10px] text-slate-400 truncate">
                         {t.teamName}

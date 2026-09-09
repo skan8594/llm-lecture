@@ -5,7 +5,8 @@ import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { INITIAL_SUBMISSIONS } from './src/data/seedSubmissions.ts';
-import { CodeSubmission, TrainingSessionConfig, TeamAsset } from './src/types.ts';
+import { getInitialDatasets } from './src/data/sampleDatasets.ts';
+import { CodeSubmission, TrainingSessionConfig, TeamAsset, SampleDataset } from './src/types.ts';
 
 dotenv.config();
 
@@ -20,8 +21,8 @@ app.use(express.json({ limit: '25mb' }));
 // In-memory state for training session
 let sessionConfig: TrainingSessionConfig = {
   totalTargetTeams: 15,
-  trainingTitle: '2026 신입사원 LLM 업무 생산성 극대화 해커톤 & 코드 쇼케이스',
-  instructorName: 'AI 교육 디렉터',
+  trainingTitle: '반도체 제조 혁신 LLM 생산성 극대화 발표회',
+  instructorName: '반도체 AI 디렉터',
   isVotingOpen: true,
   submissionDeadlineMinutes: 30,
   sessionStartTime: Date.now(),
@@ -29,6 +30,7 @@ let sessionConfig: TrainingSessionConfig = {
 
 let submissions: CodeSubmission[] = [...INITIAL_SUBMISSIONS];
 let teamAssets: Record<number, TeamAsset[]> = {};
+let sampleDatasets: SampleDataset[] = getInitialDatasets();
 
 // Lazy Gemini client helper
 let geminiClient: GoogleGenAI | null = null;
@@ -53,26 +55,24 @@ app.get('/api/session', (req, res) => {
   const totalSubmissions = submissions.length;
   const totalVotes = submissions.reduce((acc, cur) => acc + cur.votes, 0);
   
-  // Calculate team submission breakdown
+  // Calculate team submission breakdown dynamically
   const teamStats: Record<string, number> = {};
-  for (let i = 1; i <= 15; i++) {
-    teamStats[`${i}조`] = 0;
-  }
   submissions.forEach(sub => {
     if (sub.team) {
       teamStats[sub.team] = (teamStats[sub.team] || 0) + 1;
     }
   });
 
-  const submittedTeams = Object.values(teamStats).filter(c => c > 0).length;
+  const submittedTeams = Object.keys(teamStats).length;
+  const targetCount = sessionConfig.totalTargetTeams || Math.max(1, submittedTeams);
 
   res.json({
     config: sessionConfig,
     stats: {
       totalSubmissions,
-      totalTarget: sessionConfig.totalTargetTeams,
+      totalTarget: targetCount,
       submittedTeams,
-      submissionRate: Math.min(100, Math.round((submittedTeams / sessionConfig.totalTargetTeams) * 100)),
+      submissionRate: Math.min(100, Math.round((submittedTeams / targetCount) * 100)),
       totalVotes,
       teamStats,
     },
@@ -109,15 +109,15 @@ app.post('/api/submissions', (req, res) => {
     id: `sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     authorName: String(authorName).trim(),
     employeeId: employeeId ? String(employeeId).trim() : `2026-${Math.floor(1000 + Math.random() * 9000)}`,
-    team: team || '자율조',
-    department: department || '신입사원',
+    team: team || '1조',
+    department: department || '공정기술팀',
     title: String(title).trim(),
-    category: category || 'internal_tools',
-    promptUsed: promptUsed ? String(promptUsed).trim() : 'LLM을 활용한 업무 생산성 자동화 코드 생성',
+    category: category || 'yield_defect',
+    promptUsed: promptUsed ? String(promptUsed).trim() : 'LLM을 활용한 반도체 제조 공정/설비 이상 분석 및 자동화 코드 생성',
     language: language || 'javascript',
     code: String(code).trim(),
-    productivityImpact: productivityImpact || '주당 약 2~4시간 업무 절감 기대',
-    description: description || 'LLM으로 개발한 업무 생산성 향상 코드입니다.',
+    productivityImpact: productivityImpact || '공정 분석 시간 90% 단축 및 수율 이상 조기 감지',
+    description: description || 'LLM으로 개발한 반도체 공정 및 설비 개선 아이템 코드입니다.',
     createdAt: Date.now(),
     votes: 0,
     voterIds: [],
@@ -191,7 +191,7 @@ app.post('/api/admin/reset', (req, res) => {
 // 7. Team Assets: Get assets for a specific team
 app.get('/api/teams/:teamNumber/assets', (req, res) => {
   const teamNum = parseInt(req.params.teamNumber, 10);
-  if (isNaN(teamNum) || teamNum < 1 || teamNum > 15) {
+  if (isNaN(teamNum) || teamNum < 1) {
     return res.status(400).json({ error: '유효하지 않은 조 번호입니다.' });
   }
   res.json({ assets: teamAssets[teamNum] || [] });
@@ -200,7 +200,7 @@ app.get('/api/teams/:teamNumber/assets', (req, res) => {
 // 8. Team Assets: Upload/Share an asset within a specific team
 app.post('/api/teams/:teamNumber/assets', (req, res) => {
   const teamNum = parseInt(req.params.teamNumber, 10);
-  if (isNaN(teamNum) || teamNum < 1 || teamNum > 15) {
+  if (isNaN(teamNum) || teamNum < 1) {
     return res.status(400).json({ error: '유효하지 않은 조 번호입니다.' });
   }
 
@@ -242,6 +242,48 @@ app.delete('/api/teams/:teamNumber/assets/:assetId', (req, res) => {
   res.json({ success: true });
 });
 
+// 10. Datasets: Get all sample CSV datasets
+app.get('/api/datasets', (req, res) => {
+  res.json({ datasets: sampleDatasets });
+});
+
+// 11. Datasets: Add a new sample CSV dataset (Instructor)
+app.post('/api/datasets', (req, res) => {
+  const { title, fileName, description, csvContent, fileSize, rowCount, uploadedBy } = req.body;
+  if (!title || !csvContent) {
+    return res.status(400).json({ error: '제목과 CSV 내용을 모두 입력해주세요.' });
+  }
+
+  const cleanFileName = fileName ? String(fileName).trim() : `${String(title).trim().replace(/\s+/g, '_').toLowerCase()}.csv`;
+  const newDataset: SampleDataset = {
+    id: `dataset-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    title: String(title).trim(),
+    fileName: cleanFileName.endsWith('.csv') ? cleanFileName : `${cleanFileName}.csv`,
+    description: description ? String(description).trim() : '강사 업로드 실습 데이터셋',
+    csvContent: String(csvContent).trim(),
+    fileSize: fileSize || '1.0 KB',
+    rowCount: typeof rowCount === 'number' ? rowCount : 0,
+    uploadedAt: Date.now(),
+    uploadedBy: uploadedBy || '강사',
+  };
+
+  sampleDatasets.unshift(newDataset);
+  res.status(201).json({ success: true, dataset: newDataset });
+});
+
+// 12. Datasets: Delete a dataset (Instructor)
+app.delete('/api/datasets/:id', (req, res) => {
+  const { id } = req.params;
+  sampleDatasets = sampleDatasets.filter((d) => d.id !== id);
+  res.json({ success: true });
+});
+
+// 13. Datasets: Reset to initial sample datasets
+app.post('/api/datasets/reset', (req, res) => {
+  sampleDatasets = getInitialDatasets();
+  res.json({ success: true, datasets: sampleDatasets });
+});
+
 // 7. Gemini API: Generate productivity code helper for participants
 app.post('/api/gemini/generate-code', async (req, res) => {
   try {
@@ -257,20 +299,20 @@ app.post('/api/gemini/generate-code', async (req, res) => {
       });
     }
 
-    const systemInstruction = `당신은 90명 신입사원 대상 LLM 업무 생산성 교육의 AI 코딩 멘토입니다.
-신입사원이 입력한 업무 요구사항을 바탕으로, 즉시 구동 가능한 고품질의 실무 자동화 코드를 작성해야 합니다.
+    const systemInstruction = `당신은 반도체 제조(FAB 공정, 설비, 계측, 수율, 물류) 도메인 특화 LLM 업무 생산성 교육의 AI 코딩 멘토입니다.
+반도체 엔지니어가 입력한 업무 요구사항(수율 분석, 챔버 이상 탐지, FDC 파라미터 최적화, 결함 분류, 웨이퍼 물류 관리 등)을 바탕으로, 즉시 구동 가능한 고품질의 실무 자동화 및 분석 코드를 작성해야 합니다.
 지원 언어/타입:
-- 'html': 브라우저에서 바로 렌더링되고 작동하는 단일 파일 HTML/CSS/JavaScript 미니 웹 위젯 (인라인 스타일, 모던 다크 UI, 폼 입력과 실시간 계산/출력).
-- 'javascript': console.log()로 풍부한 실행 결과와 표(console.table)를 보여주는 Node/브라우저 스크립트.
-- 'python': 데이터 전처리, 통계, 업무 루틴 계산 등을 수행하고 터미널 표준출력(print)으로 깔끔하게 포맷팅하는 스크립트.
+- 'html': 브라우저에서 바로 렌더링되고 작동하는 단일 파일 HTML/CSS/JavaScript 미니 대시보드/위젯 (인라인 스타일, 반도체 FAB 다크 모던 UI, 파라미터 입력 및 시뮬레이션 결과 표/차트 출력).
+- 'javascript': console.log() 또는 DOM 조작으로 반도체 센서/수율 데이터를 가공하고 이상치를 판별하는 스크립트.
+- 'python': 웨이퍼 맵 데이터 전처리, FDC 센서 통계 계산, 이상 챔버 인터락 판정 등을 수행하고 터미널 표준출력(print)으로 깔끔하게 포맷팅하는 스크립트.
 
 JSON 형식으로 응답하세요:
 {
-  "title": "자동화 도구 제목 (간결한 한국어)",
+  "title": "개선 도구 제목 (간결한 한국어)",
   "language": "${language}",
   "code": "실제 구동 가능한 순수 코드 문자열 (마크다운 백틱 제외)",
-  "productivityImpact": "구체적인 생산성 절감 수치 (예: 주당 5시간 단축, 수작업 90% 자동화)",
-  "description": "2~3문장의 핵심 동작 원리 및 비즈니스 효과 설명"
+  "productivityImpact": "구체적인 수율 개선 및 시간 단축 수치 (예: 분석 시간 40분 -> 2분 단축, 수율 손실 0.5% 선제 예방)",
+  "description": "2~3문장의 핵심 동작 원리 및 반도체 공정/설비 효과 설명"
 }`;
 
     const promptText = `요청 업무: ${userPrompt}\n선호 언어: ${language}\n업무 분야: ${category}`;
@@ -308,17 +350,17 @@ app.post('/api/gemini/review-code', async (req, res) => {
       });
     }
 
-    const systemInstruction = `당신은 대기업 신입사원 LLM 해커톤의 수석 심사위원입니다.
-제출된 프롬프트와 생성 코드를 평가하여 JSON으로 반환하세요.
+    const systemInstruction = `당신은 반도체 제조 혁신 LLM 해커톤의 수석 심사위원입니다.
+반도체 공정 및 설비 개선 관점에서 제출된 프롬프트와 생성 코드를 평가하여 JSON으로 반환하세요.
 {
   "score": 92, // 100점 만점
-  "productivityScore": 95, // 실무 생산성 점수
+  "productivityScore": 95, // 공정 개선 및 수율 향상 점수
   "promptEngineeringScore": 90, // LLM 프롬프트 작성 역량 점수
-  "codeQualityScore": 91, // 코드 완성도 점수
+  "codeQualityScore": 91, // 코드 완성도 및 FAB 현장 적용성 점수
   "summary": "1~2문장의 핵심 총평",
   "strengths": ["강점1", "강점2"],
   "improvements": ["개선 팁1", "개선 팁2"],
-  "expectedTimeSaved": "월간 예상 절감 시간 (예: 약 20시간/월)"
+  "expectedTimeSaved": "예상 수율 개선 또는 공정 단축 시간 (예: 로트당 분석 38분 절감)"
 }`;
 
     const promptText = `제목: ${title}\n사용 프롬프트: ${promptUsed}\n언어: ${language}\n코드:\n${code.slice(0, 3000)}`;

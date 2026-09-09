@@ -1,12 +1,12 @@
 export type CodeLanguage = 'html' | 'javascript' | 'python' | 'sql' | 'json';
 
 export type ProductivityCategory = 
-  | 'excel_automation'     // 엑셀/데이터 자동화
-  | 'email_document'       // 이메일/문서 요약 및 작성
-  | 'data_analysis'        // 데이터 분석 및 시각화
-  | 'cs_support'           // CS/고객 응대 자동화
-  | 'internal_tools'       // 사내 업무 도구 및 유틸리티
-  | 'workflow_macro';      // 반복 업무 매크로
+  | 'yield_defect'          // 수율 분석 및 결함(Defect) 개선
+  | 'process_optimization'  // 공정 파라미터 최적화 (Photo/Etch/ThinFilm/CMP)
+  | 'equipment_fdc'         // 설비 예지보전 & FDC 이상 감지
+  | 'metrology_qa'          // 계측 & 품질 검사 자동화
+  | 'lot_logistics'         // 웨이퍼 물류 & 큐타임(Q-Time) 최적화
+  | 'utility_safety';       // FAB 유틸리티 & 환경안전 관리
 
 export interface CodeSubmission {
   id: string;
@@ -103,4 +103,16 @@ export interface TeamAsset {
   content?: string;            // 코드/프롬프트/텍스트 메모 내용
   uploadedBy?: string;         // 소속 조 (예: 1조)
   createdAt: number;           // 생성 시각
+}
+
+export interface SampleDataset {
+  id: string;
+  title: string;              // 데이터셋 명칭 (예: 웨이퍼 결함 맵 결측치 데이터)
+  fileName: string;           // 파일명 (예: wafer_defect_map.csv)
+  description: string;        // 데이터 설명 및 컬럼 안내
+  csvContent: string;         // 원본 CSV 텍스트
+  fileSize: string;           // 파일 크기 (예: "4.2 KB")
+  rowCount: number;           // 데이터 행 수 (헤더 제외)
+  uploadedAt: number;         // 업로드 시각
+  uploadedBy?: string;        // 등록자 (예: 강사)
 }

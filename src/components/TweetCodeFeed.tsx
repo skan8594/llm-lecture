@@ -102,10 +102,10 @@ export const TweetCodeFeed: React.FC<TweetCodeFeedProps> = ({
             onChange={(e) => setSelectedTeamFilter(e.target.value)}
             className="bg-slate-950 text-slate-300 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-indigo-500"
           >
-            <option value="ALL">전체 분임조</option>
-            {Array.from({ length: 15 }, (_, i) => i + 1).map((num) => (
+            <option value="ALL">전체 팀</option>
+            {Array.from({ length: Math.max(15, ...submissions.map((s) => getTeamNumber(s.team))) }, (_, i) => i + 1).map((num) => (
               <option key={num} value={String(num)}>
-                제 {num} 분임조
+                제 {num} 조
               </option>
             ))}
           </select>
@@ -139,7 +139,7 @@ export const TweetCodeFeed: React.FC<TweetCodeFeedProps> = ({
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="코드, 업무 키워드 검색..."
+              placeholder="코드, 키워드 검색..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 w-44 sm:w-56"
@@ -152,8 +152,8 @@ export const TweetCodeFeed: React.FC<TweetCodeFeedProps> = ({
       {filteredSubmissions.length === 0 ? (
         <div className="p-12 text-center bg-slate-900 border border-slate-800 rounded-2xl text-slate-400 space-y-2">
           <Code2 className="w-8 h-8 text-slate-600 mx-auto" />
-          <p className="text-sm font-bold text-slate-300">표시할 코드 트윗이 없습니다.</p>
-          <p className="text-xs text-slate-500">각 분임조에서 과제를 제출하면 실시간으로 피드에 게시됩니다.</p>
+          <p className="text-sm font-bold text-slate-300">표시할 코드 피드가 없습니다.</p>
+          <p className="text-xs text-slate-500">팀별 과제가 제출되면 실시간으로 피드에 표시됩니다.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

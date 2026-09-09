@@ -63,9 +63,9 @@ export const MobileSubmissionView: React.FC<MobileSubmissionViewProps> = ({
   const [authorName, setAuthorName] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [team, setTeam] = useState('3조');
-  const [department, setDepartment] = useState('영업1팀');
+  const [department, setDepartment] = useState('공정기술팀');
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState<ProductivityCategory>('excel_automation');
+  const [category, setCategory] = useState<ProductivityCategory>('yield_defect');
   const [language, setLanguage] = useState<CodeLanguage>('javascript');
   const [promptUsed, setPromptUsed] = useState('');
   const [code, setCode] = useState('');
@@ -627,12 +627,12 @@ export const MobileSubmissionView: React.FC<MobileSubmissionViewProps> = ({
                       onChange={(e) => setCategory(e.target.value as ProductivityCategory)}
                       className="w-full text-xs p-2.5 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-indigo-500"
                     >
-                      <option value="excel_automation">📊 엑셀/스프레드시트 자동화</option>
-                      <option value="email_document">📝 문서/이메일 작성 및 요약</option>
-                      <option value="data_analysis">📈 데이터 분석 및 시각화</option>
-                      <option value="cs_support">💬 CS / 고객 응대 매크로</option>
-                      <option value="internal_tools">🛠️ 사내 업무 도구 및 유틸</option>
-                      <option value="workflow_macro">⚡ 반복 업무 자동화</option>
+                      <option value="yield_defect">🔬 수율 분석 & 결함 개선</option>
+                      <option value="process_optimization">⚙️ 공정 파라미터 최적화</option>
+                      <option value="equipment_fdc">🛡️ 설비 예지보전 & FDC</option>
+                      <option value="metrology_qa">📐 계측 & 품질 검사</option>
+                      <option value="lot_logistics">🔄 웨이퍼 물류 & Q-Time</option>
+                      <option value="utility_safety">⚡ FAB 유틸리티 & 안전</option>
                     </select>
                   </div>
 

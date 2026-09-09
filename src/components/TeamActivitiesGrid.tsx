@@ -26,12 +26,12 @@ interface TeamActivitiesGridProps {
 }
 
 const CATEGORY_NAMES: Record<ProductivityCategory, string> = {
-  excel_automation: '엑셀/데이터 자동화',
-  email_document: '이메일/문서 자동화',
-  data_analysis: '데이터 분석/SQL',
-  cs_support: 'CS/고객응대 챗봇',
-  internal_tools: '사내도구/온보딩',
-  workflow_macro: '반복 매크로',
+  yield_defect: '수율/결함 개선',
+  process_optimization: '공정 최적화',
+  equipment_fdc: '설비/FDC 이상감지',
+  metrology_qa: '계측/품질 검사',
+  lot_logistics: '물류/Q-Time 최적화',
+  utility_safety: 'FAB 유틸리티/안전',
 };
 
 export const TeamActivitiesGrid: React.FC<TeamActivitiesGridProps> = ({
@@ -65,21 +65,21 @@ export const TeamActivitiesGrid: React.FC<TeamActivitiesGridProps> = ({
   return (
     <div className="space-y-4">
       {/* Top Overview Banner */}
-      <div className="p-4 bg-slate-900/90 border border-slate-800 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-lg">
+      <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-md">
         <div>
           <div className="flex items-center gap-2">
             <span className="p-1.5 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
               <Users className="w-4 h-4" />
             </span>
-            <h3 className="text-base font-black text-white">
-              15개 조별 활동 & 발표 프로젝트 보드
+            <h3 className="text-sm sm:text-base font-black text-white">
+              팀별 활동 & 발표 프로젝트 보드
             </h3>
             <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800">
-              {completedCount} / 15팀 발표 완료
+              {completedCount} / {teams.length}팀 발표 완료
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            15개 조가 발굴한 실무 자동화 대표 프로젝트를 확인하고 무대 발표를 진행합니다.
+            각 팀이 발굴한 실무 자동화 대표 프로젝트를 확인하고 무대 발표를 진행합니다.
           </p>
         </div>
 
@@ -110,7 +110,7 @@ export const TeamActivitiesGrid: React.FC<TeamActivitiesGridProps> = ({
               : 'bg-slate-900 hover:bg-slate-800 text-slate-400'
           }`}
         >
-          전체 15개 조 ({teams.length})
+          전체 팀 ({teams.length})
         </button>
         {Object.entries(CATEGORY_NAMES).map(([catKey, label]) => {
           const count = teams.filter((t) => t.category === catKey).length;
@@ -131,7 +131,7 @@ export const TeamActivitiesGrid: React.FC<TeamActivitiesGridProps> = ({
         })}
       </div>
 
-      {/* 15 Teams Cards Grid */}
+      {/* Teams Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredTeams.map((team) => {
           const isPresenting = team.presentationStatus === 'presenting';
@@ -153,7 +153,7 @@ export const TeamActivitiesGrid: React.FC<TeamActivitiesGridProps> = ({
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="px-2.5 py-0.5 text-xs font-black rounded-lg bg-indigo-600 text-white">
-                      제 {team.teamNumber} 분임조
+                      제 {team.teamNumber} 조
                     </span>
                     {team.category && CATEGORY_NAMES[team.category] && (
                       <span className="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-indigo-950 text-indigo-300 border border-indigo-850">

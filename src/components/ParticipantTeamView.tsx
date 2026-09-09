@@ -1,114 +1,241 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
+  Users,
+  Code2,
+  FolderLock,
   Upload,
   FileText,
   Image as ImageIcon,
-  Code as CodeIcon,
-  Trash2,
-  Download,
-  Copy,
-  Check,
   Sparkles,
   Play,
   Heart,
-  Search,
-  Zap,
-  Lightbulb,
-  Wrench,
-  Eye,
-  Plus,
-  RefreshCw,
-  FolderLock,
-  Users,
+  Save,
   CheckCircle2,
-  AlertCircle,
+  RefreshCw,
+  Plus,
+  Trash2,
+  Download,
+  Eye,
   FileCode,
-  Link as LinkIcon,
+  Copy,
+  Check,
+  Search,
+  ExternalLink,
+  Target,
+  Lightbulb,
+  Briefcase,
+  ArrowRight,
+  FileSpreadsheet,
+  BarChart3,
 } from 'lucide-react';
-import {
-  CodeSubmission,
-  CodeLanguage,
-  ProductivityCategory,
-  TeamActivity,
-  TeamAsset,
-} from '../types';
+import { TeamActivity, CodeSubmission, ProductivityCategory, CodeLanguage, TeamAsset, SampleDataset } from '../types';
 import { CodeRunner } from './CodeRunner';
+import { ParticipantDatasetList } from './ParticipantDatasetList';
+import { SampleWaferDashboard } from './SampleWaferDashboard';
+import { formatTeamName, formatTeamHandle } from '../utils/teamUtils';
 
 interface ParticipantTeamViewProps {
-  teamNumber: number; // 1 ~ 15
   team: TeamActivity;
+  teamNumber: number;
   submissions: CodeSubmission[];
-  onSubmit: (sub: Partial<CodeSubmission>) => Promise<boolean>;
-  onVote: (id: string, reactionType?: string) => void;
+  datasets?: SampleDataset[];
+  onSubmit: (submission: Omit<CodeSubmission, 'id' | 'votes' | 'createdAt'>) => void;
+  onVote: (submissionId: string) => void;
   votedIds: Set<string>;
   isVotingOpen: boolean;
-  onSelectSubmission: (sub: CodeSubmission) => void;
+  onSelectSubmission?: (sub: CodeSubmission) => void;
+  onUpdateTeamInfo?: (updatedFields: Partial<TeamActivity>) => void;
 }
 
+const CATEGORY_LABELS: Record<ProductivityCategory, string> = {
+  yield_defect: '🔬 수율 분석 & 결함 개선',
+  process_optimization: '⚙️ 공정 파라미터 최적화',
+  equipment_fdc: '🛡️ 설비 예지보전 & FDC',
+  metrology_qa: '📐 계측 & 품질 검사',
+  lot_logistics: '🔄 웨이퍼 물류 & Q-Time',
+  utility_safety: '⚡ FAB 유틸리티 & 환경안전',
+};
+
 export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
-  teamNumber,
   team,
+  teamNumber,
   submissions,
+  datasets = [],
   onSubmit,
   onVote,
   votedIds,
   isVotingOpen,
   onSelectSubmission,
+  onUpdateTeamInfo,
 }) => {
-  // Navigation tabs: 'workspace' (우리 팀 워크스페이스) vs 'voting' (전체 팀 투표)
-  const [activeTab, setActiveTab] = useState<'workspace' | 'voting'>('workspace');
+  // Navigation Tabs: 'info' | 'code' | 'assets' | 'datasets' | 'dashboard' | 'voting'
+  const [activeTab, setActiveTab] = useState<'info' | 'code' | 'assets' | 'datasets' | 'dashboard' | 'voting'>('info');
 
-  // URL copy indicator
-  const [copiedUrl, setCopiedUrl] = useState(false);
+  // ==================== TAB 1: TEAM INFO STATE ====================
+  const [teamName, setTeamName] = useState(team.teamName || `제 ${teamNumber} 조`);
+  const [slogan, setSlogan] = useState(team.slogan || '');
+  const [category, setCategory] = useState<ProductivityCategory>(team.category || 'yield_defect');
+  const [problemStatement, setProblemStatement] = useState(team.problemStatement || '');
+  const [productivityImpact, setProductivityImpact] = useState(team.productivityImpact || '');
+  const [membersInput, setMembersInput] = useState(
+    Array.isArray(team.members)
+      ? team.members.map((m) => (typeof m === 'string' ? m : m.name)).join(', ')
+      : ''
+  );
+  const [isTeamInfoSaved, setIsTeamInfoSaved] = useState(false);
 
-  // ==================== TEAM ASSETS STATE ====================
-  const [assets, setAssets] = useState<TeamAsset[]>(() => {
-    try {
-      const cached = localStorage.getItem(`llm_hackathon_team_assets_${teamNumber}`);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) {}
-    return [];
+  // Sync state if team prop updates
+  useEffect(() => {
+    if (team.teamName) setTeamName(team.teamName);
+    if (team.slogan) setSlogan(team.slogan);
+    if (team.category) setCategory(team.category);
+    if (team.problemStatement) setProblemStatement(team.problemStatement);
+    if (team.productivityImpact) setProductivityImpact(team.productivityImpact);
+  }, [team]);
+
+  const handleSaveTeamInfo = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updatedFields: Partial<TeamActivity> = {
+      teamName: teamName.trim() || `제 ${teamNumber} 조`,
+      slogan: slogan.trim(),
+      category,
+      problemStatement: problemStatement.trim(),
+      productivityImpact: productivityImpact.trim(),
+    };
+
+    if (onUpdateTeamInfo) {
+      onUpdateTeamInfo(updatedFields);
+    }
+
+    setIsTeamInfoSaved(true);
+    setTimeout(() => setIsTeamInfoSaved(false), 2500);
+  };
+
+  // ==================== TAB 2: CODE SUBMISSION STATE ====================
+  // Check if our team already submitted
+  const myTeamSubmission = submissions.find((s) => {
+    const match = String(s.team).match(/\d+/);
+    return match ? parseInt(match[0], 10) === teamNumber : false;
   });
-  const [isLoadingAssets, setIsLoadingAssets] = useState(false);
 
-  // Asset Upload Form
+  const [title, setTitle] = useState(myTeamSubmission?.title || '');
+  const [promptUsed, setPromptUsed] = useState(myTeamSubmission?.promptUsed || '');
+  const [code, setCode] = useState(myTeamSubmission?.code || '');
+  const [language, setLanguage] = useState<CodeLanguage>(myTeamSubmission?.language || 'python');
+  const [sampleInput, setSampleInput] = useState(myTeamSubmission?.sampleInput || '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [showRunnerPreview, setShowRunnerPreview] = useState(false);
+
+  // Update form if submission already exists
+  useEffect(() => {
+    if (myTeamSubmission) {
+      setTitle(myTeamSubmission.title);
+      setPromptUsed(myTeamSubmission.promptUsed || '');
+      setCode(myTeamSubmission.code);
+      setLanguage(myTeamSubmission.language);
+      if (myTeamSubmission.sampleInput) setSampleInput(myTeamSubmission.sampleInput);
+    }
+  }, [myTeamSubmission]);
+
+  // AI Code Generator drawer
+  const [showAiHelper, setShowAiHelper] = useState(false);
+  const [aiIdeaPrompt, setAiIdeaPrompt] = useState('');
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const handleGenerateAiCode = async () => {
+    if (!aiIdeaPrompt.trim()) return;
+    setIsGeneratingAi(true);
+    setAiError(null);
+
+    try {
+      const res = await fetch('/api/gemini/generate-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userPrompt: aiIdeaPrompt,
+          language,
+          category,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error('AI 코드 생성에 실패했습니다.');
+      }
+
+      const data = await res.json();
+      if (data.code) {
+        setCode(data.code);
+        if (data.title && !title) setTitle(data.title);
+        if (data.promptUsed) setPromptUsed(data.promptUsed);
+        if (data.sampleInput) setSampleInput(data.sampleInput);
+        setShowAiHelper(false);
+        setShowRunnerPreview(true);
+      }
+    } catch (err: any) {
+      setAiError(err.message || '코드 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsGeneratingAi(false);
+    }
+  };
+
+  const handleSubmitCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !code.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      onSubmit({
+        title: title.trim(),
+        team: `제 ${teamNumber} 조`,
+        authorName: team.teamName || `제 ${teamNumber} 조`,
+        department: team.category ? CATEGORY_LABELS[team.category] : '업무 혁신',
+        code: code.trim(),
+        language,
+        sampleInput: sampleInput.trim(),
+        promptUsed: promptUsed.trim(),
+        description: problemStatement.trim() || title.trim(),
+        productivityImpact: productivityImpact.trim() || '업무 처리 시간 80% 단축',
+        category,
+      });
+
+      setSubmitSuccess(true);
+      setTimeout(() => setSubmitSuccess(false), 3000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // ==================== TAB 3: TEAM ASSETS STATE ====================
+  const [assets, setAssets] = useState<TeamAsset[]>([]);
+  const [isLoadingAssets, setIsLoadingAssets] = useState(false);
   const [assetTitle, setAssetTitle] = useState('');
   const [assetContent, setAssetContent] = useState('');
   const [assetMode, setAssetMode] = useState<'file' | 'text'>('file');
   const [selectedFile, setSelectedFile] = useState<{
     name: string;
     size: string;
-    type: 'image' | 'code' | 'document' | 'data' | 'link' | 'note';
-    dataUrl?: string;
+    type: string;
+    dataUrl: string;
   } | null>(null);
   const [isUploadingAsset, setIsUploadingAsset] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [previewAsset, setPreviewAsset] = useState<TeamAsset | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Asset preview modal
-  const [previewAsset, setPreviewAsset] = useState<TeamAsset | null>(null);
-  const [copiedSnippetId, setCopiedSnippetId] = useState<string | null>(null);
-
-  // Fetch team assets from server & persist
   const fetchTeamAssets = async () => {
+    setIsLoadingAssets(true);
     try {
-      setIsLoadingAssets(true);
       const res = await fetch(`/api/teams/${teamNumber}/assets`);
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data.assets)) {
-          setAssets(data.assets);
-          localStorage.setItem(
-            `llm_hackathon_team_assets_${teamNumber}`,
-            JSON.stringify(data.assets)
-          );
-        }
+        setAssets(data.assets || []);
       }
     } catch (e) {
-      // Fallback to localStorage
+      console.warn('Using local assets storage');
     } finally {
       setIsLoadingAssets(false);
     }
@@ -118,41 +245,19 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
     fetchTeamAssets();
   }, [teamNumber]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        `llm_hackathon_team_assets_${teamNumber}`,
-        JSON.stringify(assets)
-      );
-    } catch (e) {}
-  }, [assets, teamNumber]);
-
-  // Handle File selection (drag/drop or file input)
   const processSelectedFile = (file: File) => {
     const reader = new FileReader();
-    const isImg = file.type.startsWith('image/');
-    const isCode = /\.(js|ts|py|sql|html|css|json|jsx|tsx)$/i.test(file.name);
-    const isData = /\.(csv|xlsx|xls|json|tsv)$/i.test(file.name);
-
-    let type: 'image' | 'code' | 'document' | 'data' = 'document';
-    if (isImg) type = 'image';
-    else if (isCode) type = 'code';
-    else if (isData) type = 'data';
-
-    const sizeStr =
-      file.size < 1024 * 1024
-        ? `${Math.round(file.size / 1024)} KB`
-        : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
-
     reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      const isImg = file.type.startsWith('image/');
       setSelectedFile({
         name: file.name,
-        size: sizeStr,
-        type,
-        dataUrl: e.target?.result as string,
+        size: `${(file.size / 1024).toFixed(1)} KB`,
+        type: isImg ? 'image' : 'file',
+        dataUrl,
       });
       if (!assetTitle) {
-        setAssetTitle(file.name.replace(/\.[^/.]+$/, ''));
+        setAssetTitle(file.name);
       }
     };
     reader.readAsDataURL(file);
@@ -167,58 +272,61 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
   };
 
   const handleUploadAsset = async () => {
-    if (assetMode === 'file' && !selectedFile && !assetTitle) {
-      alert('파일을 선택하거나 자료 제목을 입력해주세요.');
-      return;
-    }
-    if (assetMode === 'text' && !assetContent.trim()) {
-      alert('공유할 프롬프트 또는 코드 내용을 입력해주세요.');
-      return;
-    }
+    if (!assetTitle.trim() && !selectedFile?.name && !assetContent.trim()) return;
 
     setIsUploadingAsset(true);
-    const newAsset: TeamAsset = {
-      id: `asset-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      teamNumber,
-      title: (assetTitle || selectedFile?.name || '팀 자료').trim(),
+    const newPayload = {
+      title: assetTitle.trim() || selectedFile?.name || '공유 메모',
       fileName: selectedFile?.name,
-      fileType: assetMode === 'text' ? 'code' : selectedFile?.type || 'document',
+      fileType: selectedFile?.type || (assetMode === 'text' ? 'document' : 'file'),
       fileSize: selectedFile?.size,
       dataUrl: selectedFile?.dataUrl,
-      content: assetMode === 'text' ? assetContent : undefined,
-      uploadedBy: `${teamNumber}조`,
-      createdAt: Date.now(),
+      content: assetMode === 'text' ? assetContent.trim() : undefined,
+      uploadedBy: `제 ${teamNumber} 조 팀원`,
     };
 
     try {
       const res = await fetch(`/api/teams/${teamNumber}/assets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newAsset),
+        body: JSON.stringify(newPayload),
       });
+
       if (res.ok) {
         const data = await res.json();
         if (data.asset) {
           setAssets((prev) => [data.asset, ...prev]);
-        } else {
-          setAssets((prev) => [newAsset, ...prev]);
         }
       } else {
-        setAssets((prev) => [newAsset, ...prev]);
+        // Local fallback
+        const mockNew: TeamAsset = {
+          id: `asset-${Date.now()}`,
+          teamNumber,
+          title: newPayload.title,
+          fileName: newPayload.fileName,
+          fileType: newPayload.fileType,
+          fileSize: newPayload.fileSize,
+          dataUrl: newPayload.dataUrl,
+          content: newPayload.content,
+          uploadedBy: newPayload.uploadedBy,
+          createdAt: Date.now(),
+        };
+        setAssets((prev) => [mockNew, ...prev]);
       }
-    } catch (e) {
-      setAssets((prev) => [newAsset, ...prev]);
-    } finally {
-      setIsUploadingAsset(false);
+
+      // Reset form
       setAssetTitle('');
       setAssetContent('');
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsUploadingAsset(false);
     }
   };
 
   const handleDeleteAsset = async (assetId: string) => {
-    if (!window.confirm('이 자료를 삭제하시겠습니까?')) return;
     setAssets((prev) => prev.filter((a) => a.id !== assetId));
     try {
       await fetch(`/api/teams/${teamNumber}/assets/${assetId}`, {
@@ -227,111 +335,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
     } catch (e) {}
   };
 
-  // ==================== TEAM SUBMISSION FORM STATE ====================
-  // Check if our team already has a submission
-  const myTeamSubmission = submissions.find(
-    (s) => s.team === `${teamNumber}조` || s.team === String(teamNumber)
-  );
-
-  const [title, setTitle] = useState(myTeamSubmission?.title || '');
-  const [language, setLanguage] = useState<CodeLanguage>(
-    myTeamSubmission?.language || 'javascript'
-  );
-  const [promptUsed, setPromptUsed] = useState(myTeamSubmission?.promptUsed || '');
-  const [code, setCode] = useState(myTeamSubmission?.code || '');
-  const [productivityImpact, setProductivityImpact] = useState(
-    myTeamSubmission?.productivityImpact || ''
-  );
-  const [description, setDescription] = useState(myTeamSubmission?.description || '');
-
-  // AI Prompt Helper State
-  const [showAiHelper, setShowAiHelper] = useState(false);
-  const [aiIdeaPrompt, setAiIdeaPrompt] = useState('');
-  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
-
-  // Live Runner Test State
-  const [showTestRunner, setShowTestRunner] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
-
-  // Sync form when myTeamSubmission updates
-  useEffect(() => {
-    if (myTeamSubmission) {
-      setTitle(myTeamSubmission.title);
-      setLanguage(myTeamSubmission.language);
-      setPromptUsed(myTeamSubmission.promptUsed);
-      setCode(myTeamSubmission.code);
-      setProductivityImpact(myTeamSubmission.productivityImpact);
-      setDescription(myTeamSubmission.description || '');
-    }
-  }, [myTeamSubmission]);
-
-  const handleGenerateAiCode = async () => {
-    if (!aiIdeaPrompt.trim()) return;
-    setIsGeneratingAi(true);
-    setAiError(null);
-
-    try {
-      const res = await fetch('/api/gemini/generate-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userPrompt: aiIdeaPrompt,
-          language,
-        }),
-      });
-
-      const json = await res.json();
-      if (json.success && json.data) {
-        const data = json.data;
-        if (data.title) setTitle(data.title);
-        if (data.code) setCode(data.code);
-        if (data.productivityImpact) setProductivityImpact(data.productivityImpact);
-        if (data.description) setDescription(data.description);
-        setPromptUsed(aiIdeaPrompt);
-        setShowAiHelper(false);
-        setAiIdeaPrompt('');
-      } else {
-        setAiError(json.error || 'AI 코드 생성에 실패했습니다.');
-      }
-    } catch (e: any) {
-      setAiError(e.message || '네트워크 오류가 발생했습니다.');
-    } finally {
-      setIsGeneratingAi(false);
-    }
-  };
-
-  const handleSubmitCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return alert('과제 제목을 입력해주세요.');
-    if (!code.trim()) return alert('생성된 코드를 입력해주세요.');
-
-    setIsSubmitting(true);
-    try {
-      const success = await onSubmit({
-        authorName: `${teamNumber}조`,
-        team: `${teamNumber}조`,
-        title: title.trim(),
-        language,
-        promptUsed: promptUsed.trim() || '프롬프트 미기재',
-        code: code.trim(),
-        productivityImpact: productivityImpact.trim() || '수작업 시간 80% 이상 절감',
-        description: description.trim(),
-      });
-
-      if (success) {
-        setSubmitSuccess(true);
-        setTimeout(() => setSubmitSuccess(false), 3000);
-      }
-    } catch (err) {
-      alert('제출 처리 중 오류가 발생했습니다.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // ==================== VOTING TAB FILTER STATE ====================
+  // ==================== TAB 4: VOTING TAB FILTER STATE ====================
   const [voteSearchQuery, setVoteSearchQuery] = useState('');
   const [expandedCodeId, setExpandedCodeId] = useState<string | null>(null);
 
@@ -346,41 +350,85 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased">
       {/* ================= TOP HEADER ================= */}
-      <header className="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3 shadow-md">
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
-          {/* Team Badge & URL info */}
+      <header className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-2.5 shadow-md">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-3">
+          {/* Team Identity Banner */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white font-black text-sm flex items-center justify-center shadow-md shadow-indigo-600/30">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white font-black text-sm flex items-center justify-center shadow-md shadow-indigo-600/30">
               {teamNumber}
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-extrabold text-white tracking-tight">
-                  제 {teamNumber} 분임조 워크스페이스
+                  제 {teamNumber} 조 워크스페이스
                 </h1>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                   team{teamNumber}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 truncate max-w-[220px] sm:max-w-md">
-                {team.teamName || `제 ${teamNumber} 분임조 LLM 자동화 프로젝트`}
+              <p className="text-xs text-slate-400 truncate max-w-[200px] sm:max-w-md">
+                {team.teamName || `제 ${teamNumber} 조 LLM 자동화 프로젝트`}
               </p>
             </div>
           </div>
+
+          {/* Submission status pill */}
+          <div>
+            {myTeamSubmission ? (
+              <span className="px-2.5 py-1 text-xs font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-800 rounded-xl flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                과제 제출완료
+              </span>
+            ) : (
+              <span className="px-2.5 py-1 text-xs font-semibold text-amber-400 bg-amber-950/80 border border-amber-800 rounded-xl">
+                과제 작성 중
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* ================= 2 SIMPLE TABS ================= */}
-        <div className="max-w-4xl mx-auto mt-3 flex border-b border-slate-800">
+        {/* ================= 4 DEDICATED TABS (DIVIDED TEAM MENU) ================= */}
+        <div className="max-w-5xl mx-auto mt-2.5 flex items-center gap-1 border-b border-slate-800 overflow-x-auto no-scrollbar">
+          {/* Sub-tab 1: Team Info & Project Planning */}
           <button
-            onClick={() => setActiveTab('workspace')}
-            className={`flex-1 pb-2.5 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${
-              activeTab === 'workspace'
+            onClick={() => setActiveTab('info')}
+            className={`pb-2.5 px-3 text-xs sm:text-sm font-bold flex items-center gap-1.5 border-b-2 whitespace-nowrap transition-colors ${
+              activeTab === 'info'
                 ? 'border-indigo-500 text-indigo-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Users className="w-4 h-4" />
-            <span>우리 팀 워크스페이스</span>
+            <Briefcase className="w-3.5 h-3.5" />
+            <span>1. 팀 정보 & 기획안</span>
+          </button>
+
+          {/* Sub-tab 2: Code Submission & Live Testing */}
+          <button
+            onClick={() => setActiveTab('code')}
+            className={`pb-2.5 px-3 text-xs sm:text-sm font-bold flex items-center gap-1.5 border-b-2 whitespace-nowrap transition-colors ${
+              activeTab === 'code'
+                ? 'border-indigo-500 text-indigo-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <FileCode className="w-3.5 h-3.5" />
+            <span>2. 대표 코드 & 결과물 제출</span>
+            {myTeamSubmission && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block ml-0.5" />
+            )}
+          </button>
+
+          {/* Sub-tab 3: Team Assets & Files */}
+          <button
+            onClick={() => setActiveTab('assets')}
+            className={`pb-2.5 px-3 text-xs sm:text-sm font-bold flex items-center gap-1.5 border-b-2 whitespace-nowrap transition-colors ${
+              activeTab === 'assets'
+                ? 'border-indigo-500 text-indigo-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <FolderLock className="w-3.5 h-3.5" />
+            <span>3. 팀 공유 자료실</span>
             {assets.length > 0 && (
               <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-700 font-mono">
                 {assets.length}
@@ -388,16 +436,51 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
             )}
           </button>
 
+          {/* Sub-tab 4: Sample Datasets for CSV Download */}
+          <button
+            onClick={() => setActiveTab('datasets')}
+            className={`pb-2.5 px-3 text-xs sm:text-sm font-bold flex items-center gap-1.5 border-b-2 whitespace-nowrap transition-colors ${
+              activeTab === 'datasets'
+                ? 'border-emerald-500 text-emerald-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+            <span>4. 실습 데이터셋 (CSV)</span>
+            {datasets.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-700 font-mono">
+                {datasets.length}
+              </span>
+            )}
+          </button>
+
+          {/* Sub-tab 5: Reference Deliverable Dashboard Benchmark */}
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`pb-2.5 px-3 text-xs sm:text-sm font-bold flex items-center gap-1.5 border-b-2 whitespace-nowrap transition-colors ${
+              activeTab === 'dashboard'
+                ? 'border-indigo-500 text-indigo-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
+            <span>5. 결과물 대시보드 예시</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-gradient-to-r from-indigo-900 to-emerald-900 text-indigo-200 border border-indigo-700 font-bold">
+              참고용
+            </span>
+          </button>
+
+          {/* Sub-tab 6: Peer Voting */}
           <button
             onClick={() => setActiveTab('voting')}
-            className={`flex-1 pb-2.5 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${
+            className={`pb-2.5 px-3 text-xs sm:text-sm font-bold flex items-center gap-1.5 border-b-2 whitespace-nowrap transition-colors ${
               activeTab === 'voting'
                 ? 'border-indigo-500 text-indigo-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Heart className="w-4 h-4 text-rose-400" />
-            <span>15개 분임조 투표</span>
+            <Heart className="w-3.5 h-3.5 text-rose-400" />
+            <span>6. 동료 과제 투표</span>
             <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300 font-mono">
               {submissions.length}
             </span>
@@ -406,733 +489,806 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
       </header>
 
       {/* ================= MAIN CONTENT ================= */}
-      <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 space-y-6">
-        {activeTab === 'workspace' ? (
-          /* ========================================================= */
-          /* TAB 1: OUR TEAM WORKSPACE (ASSETS SHARING & CODE SUBMIT) */
-          /* ========================================================= */
-          <div className="space-y-6">
-            {/* ================= SECTION A: TEAM ASSETS SHARING ================= */}
-            <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-4 shadow-lg">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 flex items-center justify-center">
-                    <FolderLock className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                      <span>팀 내 자료/애셋 공유</span>
-                      <span className="text-[11px] font-normal text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-800/50">
-                        {teamNumber}조 전용 비공개
-                      </span>
-                    </h2>
-                    <p className="text-xs text-slate-400">
-                      우리 조원들끼리 프롬프트, 참고 데이터, 파이썬/엑셀 스크립트, 캡처 이미지를 자유롭게 공유하세요.
-                    </p>
-                  </div>
+      <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 space-y-6">
+        {/* ================================================================= */}
+        {/* TAB 1: TEAM BASIC INFORMATION & PLANNING (DIVIDED SECTION)         */}
+        {/* ================================================================= */}
+        {activeTab === 'info' && (
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-5 shadow-lg">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-950 text-indigo-400 border border-indigo-800 flex items-center justify-center">
+                  <Briefcase className="w-4 h-4" />
                 </div>
-
-                <button
-                  onClick={fetchTeamAssets}
-                  disabled={isLoadingAssets}
-                  className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-                  title="새로고침"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isLoadingAssets ? 'animate-spin text-indigo-400' : ''}`} />
-                </button>
-              </div>
-
-              {/* Upload Input Box */}
-              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-300">새 자료 업로드</span>
-                  <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
-                    <button
-                      type="button"
-                      onClick={() => setAssetMode('file')}
-                      className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                        assetMode === 'file' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      파일/이미지
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAssetMode('text')}
-                      className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                        assetMode === 'text' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      코드/프롬프트 메모
-                    </button>
-                  </div>
-                </div>
-
-                {assetMode === 'file' ? (
-                  /* Drag and Drop Zone */
-                  <div
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setIsDragOver(true);
-                    }}
-                    onDragLeave={() => setIsDragOver(false)}
-                    onDrop={handleDrop}
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors ${
-                      isDragOver
-                        ? 'border-indigo-500 bg-indigo-950/20'
-                        : selectedFile
-                        ? 'border-emerald-600/60 bg-emerald-950/10'
-                        : 'border-slate-800 hover:border-slate-700 bg-slate-900/40'
-                    }`}
-                  >
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      className="hidden"
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          processSelectedFile(e.target.files[0]);
-                        }
-                      }}
-                    />
-                    {selectedFile ? (
-                      <div className="flex items-center justify-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center justify-center">
-                          {selectedFile.type === 'image' ? <ImageIcon className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
-                        </div>
-                        <div className="text-left">
-                          <p className="text-xs font-bold text-white truncate max-w-xs">{selectedFile.name}</p>
-                          <p className="text-[11px] text-emerald-400 font-mono">{selectedFile.size}</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedFile(null);
-                            if (fileInputRef.current) fileInputRef.current.value = '';
-                          }}
-                          className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-slate-800"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        <Upload className="w-6 h-6 mx-auto text-indigo-400" />
-                        <p className="text-xs font-semibold text-slate-300">
-                          파일을 드래그하여 놓거나 클릭하여 선택
-                        </p>
-                        <p className="text-[11px] text-slate-500">
-                          이미지, 엑셀, CSV, 파이썬/SQL 코드, 텍스트 문서 지원
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  /* Text/Prompt Memo Input */
-                  <div>
-                    <textarea
-                      value={assetContent}
-                      onChange={(e) => setAssetContent(e.target.value)}
-                      placeholder="조원들과 공유할 프롬프트 템플릿, 참고 코드, 아이디어 메모를 입력하세요..."
-                      rows={3}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
-                    />
-                  </div>
-                )}
-
-                {/* Title Input & Upload Button */}
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <input
-                      type="text"
-                      value={assetTitle}
-                      onChange={(e) => setAssetTitle(e.target.value)}
-                      placeholder="자료/애셋 제목 (예: 결산 검증 프롬프트, 샘플 데이터셋, 템플릿 코드)"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleUploadAsset}
-                    disabled={isUploadingAsset}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-md shrink-0 flex items-center gap-1.5"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>{isUploadingAsset ? '업로드 중' : '팀 내 공유 등록'}</span>
-                  </button>
+                <div>
+                  <h2 className="text-sm sm:text-base font-bold text-white">
+                    제 {teamNumber} 조 기본 정보 및 프로젝트 기획안
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    우리 팀의 명칭, 해결하려는 업무 과제, 기대 효과를 입력하고 저장하세요.
+                  </p>
                 </div>
               </div>
 
-              {/* Uploaded Assets List */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs text-slate-400 font-semibold px-1">
-                  <span>공유된 조별 자료 목록 ({assets.length}건)</span>
-                  <span className="text-[11px] text-slate-500">클릭하여 내용 확인 / 다운로드</span>
-                </div>
-
-                {assets.length === 0 ? (
-                  <div className="text-center py-6 border border-dashed border-slate-800 rounded-xl text-xs text-slate-500">
-                    아직 등록된 팀 자료가 없습니다. 프롬프트나 참고 코드를 가장 먼저 공유해보세요!
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    {assets.map((asset) => (
-                      <div
-                        key={asset.id}
-                        className="bg-slate-950/80 border border-slate-800 hover:border-slate-700 rounded-xl p-3 flex flex-col justify-between gap-2 transition-all shadow-sm group"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-2.5 min-w-0">
-                            <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 flex items-center justify-center shrink-0 mt-0.5">
-                              {asset.fileType === 'image' ? (
-                                <ImageIcon className="w-4 h-4 text-purple-400" />
-                              ) : asset.fileType === 'code' ? (
-                                <CodeIcon className="w-4 h-4 text-emerald-400" />
-                              ) : (
-                                <FileText className="w-4 h-4 text-blue-400" />
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                              <h4 className="text-xs font-bold text-white truncate group-hover:text-indigo-300 transition-colors">
-                                {asset.title}
-                              </h4>
-                              <p className="text-[11px] text-slate-400 truncate">
-                                {asset.fileSize || (asset.content ? '텍스트/코드' : '공유 파일')}
-                              </p>
-                            </div>
-                          </div>
-
-                          <button
-                            onClick={() => handleDeleteAsset(asset.id)}
-                            className="text-slate-500 hover:text-rose-400 p-1 rounded transition-colors"
-                            title="삭제"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-
-                        {/* Image Thumbnail preview if image */}
-                        {asset.dataUrl && asset.fileType === 'image' && (
-                          <div
-                            onClick={() => setPreviewAsset(asset)}
-                            className="h-24 w-full rounded-lg overflow-hidden bg-slate-900 border border-slate-800 cursor-pointer"
-                          >
-                            <img
-                              src={asset.dataUrl}
-                              alt={asset.title}
-                              className="w-full h-full object-cover hover:scale-105 transition-transform"
-                            />
-                          </div>
-                        )}
-
-                        {/* Text snippet preview if content */}
-                        {asset.content && (
-                          <div
-                            onClick={() => setPreviewAsset(asset)}
-                            className="p-2 bg-slate-900 rounded-lg text-[11px] font-mono text-slate-300 max-h-16 overflow-hidden line-clamp-2 border border-slate-800/80 cursor-pointer hover:border-slate-700"
-                          >
-                            {asset.content}
-                          </div>
-                        )}
-
-                        {/* Card Actions */}
-                        <div className="flex items-center justify-between pt-1 border-t border-slate-800/60 text-[11px]">
-                          <span className="text-slate-500">
-                            {new Date(asset.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-
-                          <div className="flex items-center gap-1">
-                            {asset.content && (
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(asset.content || '');
-                                  setCopiedSnippetId(asset.id);
-                                  setTimeout(() => setCopiedSnippetId(null), 1500);
-                                }}
-                                className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-                              >
-                                {copiedSnippetId === asset.id ? (
-                                  <Check className="w-3 h-3 text-emerald-400" />
-                                ) : (
-                                  <Copy className="w-3 h-3" />
-                                )}
-                                <span>{copiedSnippetId === asset.id ? '복사됨' : '복사'}</span>
-                              </button>
-                            )}
-
-                            {asset.dataUrl && (
-                              <a
-                                href={asset.dataUrl}
-                                download={asset.fileName || `${asset.title}.png`}
-                                className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-                              >
-                                <Download className="w-3 h-3" />
-                                <span>다운로드</span>
-                              </a>
-                            )}
-
-                            <button
-                              onClick={() => setPreviewAsset(asset)}
-                              className="flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 hover:bg-indigo-900 transition-colors"
-                            >
-                              <Eye className="w-3 h-3" />
-                              <span>보기</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </section>
-
-            {/* ================= SECTION B: OUR TEAM CODE SUBMISSION ================= */}
-            <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-5 shadow-lg">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-950/80 text-indigo-400 border border-indigo-800/60 flex items-center justify-center">
-                    <FileCode className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                      <span>우리 팀 대표 과제 코드 제출</span>
-                      {myTeamSubmission ? (
-                        <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-800">
-                          제출 완료 (수정 가능)
-                        </span>
-                      ) : (
-                        <span className="text-[11px] font-bold text-amber-400 bg-amber-950 px-2 py-0.5 rounded-full border border-amber-800">
-                          작성 대기 중
-                        </span>
-                      )}
-                    </h2>
-                    <p className="text-xs text-slate-400">
-                      발표회 시연 및 전체 조 투표에 반영될 {teamNumber}조의 최종 LLM 결과물입니다.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setShowAiHelper(!showAiHelper)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-indigo-300 bg-indigo-950 border border-indigo-800/80 hover:bg-indigo-900 transition-colors"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>AI 프롬프트 도우미</span>
-                </button>
-              </div>
-
-              {/* AI Generator Helper Drawer */}
-              {showAiHelper && (
-                <div className="bg-indigo-950/30 border border-indigo-800/50 rounded-xl p-4 space-y-3 animate-in fade-in">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
-                      <Sparkles className="w-4 h-4" />
-                      Gemini 모델로 실무 자동화 코드 초안 만들기
-                    </span>
-                    <button
-                      onClick={() => setShowAiHelper(false)}
-                      className="text-slate-400 hover:text-white text-xs"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    value={aiIdeaPrompt}
-                    onChange={(e) => setAiIdeaPrompt(e.target.value)}
-                    placeholder="예: 월말 결산 불일치 데이터를 비교하여 차액을 빨간색으로 표시하는 엑셀 자동화"
-                    className="w-full bg-slate-900 border border-indigo-900 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                  />
-                  {aiError && <p className="text-xs text-rose-400">{aiError}</p>}
-                  <div className="flex justify-end">
-                    <button
-                      onClick={handleGenerateAiCode}
-                      disabled={isGeneratingAi || !aiIdeaPrompt.trim()}
-                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
-                    >
-                      {isGeneratingAi && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                      <span>{isGeneratingAi ? '생성 중...' : '자동 생성 및 폼에 채우기'}</span>
-                    </button>
-                  </div>
+              {isTeamInfoSaved && (
+                <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-bold bg-emerald-950/80 px-3 py-1 rounded-xl border border-emerald-800 animate-in fade-in">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>저장 완료!</span>
                 </div>
               )}
+            </div>
 
-              {/* Submission Form */}
-              <form onSubmit={handleSubmitCode} className="space-y-4">
-                {/* 1. Project Title */}
+            <form onSubmit={handleSaveTeamInfo} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Team Name */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">
-                    {teamNumber}조 대표 과제 / 자동화 프로젝트 제목
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    팀 명칭 / 프로젝트명
                   </label>
                   <input
                     type="text"
                     required
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="예: 클릭 한 번으로 끝내는 월말 결산 불일치 검증 및 자동 보고서 생성"
+                    value={teamName}
+                    onChange={(e) => setTeamName(e.target.value)}
+                    placeholder="예: 제 1 조 · 식각 공정 수율 혁신팀"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
 
-                {/* 3. Prompt Used */}
+                {/* Slogan */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">
-                    LLM에 입력한 핵심 프롬프트 (Prompt Strategy)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={promptUsed}
-                    onChange={(e) => setPromptUsed(e.target.value)}
-                    placeholder="예: '신입사원이 매월 반복하는 엑셀 A열과 B열의 계정 일치 여부를 대조하고 오차 내역만 추출하는 JavaScript 코드를 작성해줘...'"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 resize-none font-mono"
-                  />
-                </div>
-
-                {/* 4. Code & Language */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-semibold text-slate-400">
-                      생성된 코드 (라이브 시연 가능)
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={language}
-                        onChange={(e) => setLanguage(e.target.value as CodeLanguage)}
-                        className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-0.5 text-xs text-slate-300 font-mono"
-                      >
-                        <option value="javascript">JavaScript</option>
-                        <option value="html">HTML / Interactive App</option>
-                        <option value="python">Python</option>
-                        <option value="sql">SQL</option>
-                        <option value="json">JSON</option>
-                      </select>
-
-                      <button
-                        type="button"
-                        onClick={() => setShowTestRunner(!showTestRunner)}
-                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800/80 hover:bg-emerald-900 transition-colors"
-                      >
-                        <Play className="w-3 h-3 fill-current" />
-                        <span>{showTestRunner ? '실행기 닫기' : '실행 테스트'}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <textarea
-                    rows={6}
-                    required
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    placeholder="생성된 코드를 붙여넣으세요..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-emerald-300 focus:outline-none focus:border-indigo-500 resize-y"
-                  />
-                </div>
-
-                {/* Code Live Runner Drawer */}
-                {showTestRunner && (
-                  <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl">
-                    <p className="text-xs font-bold text-slate-300 mb-2">코드 실시간 인터랙티브 실행 테스트</p>
-                    <CodeRunner code={code} language={language} isExpanded={true} />
-                  </div>
-                )}
-
-                {/* 5. Productivity Impact */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">
-                    기대 생산성 효과 (업무 절감 수치)
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    팀 슬로건 / 캐치프레이즈
                   </label>
                   <input
                     type="text"
-                    value={productivityImpact}
-                    onChange={(e) => setProductivityImpact(e.target.value)}
-                    placeholder="예: 월말 정산 수작업 4시간 -> 3분으로 98% 단축"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    value={slogan}
+                    onChange={(e) => setSlogan(e.target.value)}
+                    placeholder="예: 웨이퍼 결함률 0% 도전, LLM 기반 이상 패턴 3초 탐지!"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
+              </div>
 
-                {/* Submit Action */}
-                <div className="flex items-center justify-between pt-2">
-                  <div className="text-xs">
-                    {submitSuccess && (
-                      <span className="text-emerald-400 font-bold flex items-center gap-1.5 animate-in fade-in">
-                        <CheckCircle2 className="w-4 h-4" />
-                        성공적으로 {teamNumber}조 대표 과제가 제출되었습니다!
+              {/* Category Picker */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  반도체 제조 개선 분류 카테고리
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {(Object.keys(CATEGORY_LABELS) as ProductivityCategory[]).map((cat) => (
+                    <button
+                      type="button"
+                      key={cat}
+                      onClick={() => setCategory(cat)}
+                      className={`p-2.5 rounded-xl border text-left text-xs font-medium transition-all ${
+                        category === cat
+                          ? 'bg-indigo-600 border-indigo-400 text-white shadow-md'
+                          : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white'
+                      }`}
+                    >
+                      {CATEGORY_LABELS[cat]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Problem Statement (Before) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5 text-rose-400" />
+                  <span>해결하고자 하는 반도체 공정/설비 Pain Point (Before)</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={problemStatement}
+                  onChange={(e) => setProblemStatement(e.target.value)}
+                  placeholder="예: 식각(Etch) 공정 후 웨이퍼 맵에서 발생하는 불량 클러스터를 엔지니어가 수작업으로 육안 판독하여 로트당 40분 이상 소요되고 미세 결함 누락 위험 존재"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 resize-none"
+                />
+              </div>
+
+              {/* Productivity Impact (After) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>기대 수율 개선 및 분석시간 단축 효과 (After)</span>
+                </label>
+                <input
+                  type="text"
+                  value={productivityImpact}
+                  onChange={(e) => setProductivityImpact(e.target.value)}
+                  placeholder="예: 결함 판독 자동화로 로트당 분석 시간 40분 -> 1.5분 단축(96% 개선) 및 이상 로트 선제 인터락 격리"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Bottom Actions */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="submit"
+                  className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/30 active:scale-95"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>팀 정보 저장하기</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('code')}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition-colors"
+                >
+                  <span>다음: 대표 코드 작성 및 제출</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-indigo-400" />
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+
+        {/* ================================================================= */}
+        {/* TAB 2: CODE SUBMISSION & LIVE TEST RUNNER (DIVIDED SECTION)        */}
+        {/* ================================================================= */}
+        {activeTab === 'code' && (
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-5 shadow-lg">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-950 text-indigo-400 border border-indigo-800 flex items-center justify-center">
+                  <FileCode className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                    <span>제 {teamNumber} 조 대표 과제 코드 제출</span>
+                    {myTeamSubmission ? (
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-800">
+                        제출 완료 (수정 가능)
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-amber-400 bg-amber-950 px-2 py-0.5 rounded-full border border-amber-800">
+                        작성 대기 중
                       </span>
                     )}
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    발표회 시연 및 동료 투표에 반영될 최종 결과물입니다.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('dashboard')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-emerald-300 bg-emerald-950/80 border border-emerald-800 hover:bg-emerald-900 transition-colors shadow-sm"
+                  title="300mm 웨이퍼 결함 맵 대시보드 예시 확인"
+                >
+                  <BarChart3 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>대시보드 참고 예시</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAiHelper(!showAiHelper)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-indigo-300 bg-indigo-950 border border-indigo-800 hover:bg-indigo-900 transition-colors"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>AI 초안 도우미</span>
+                </button>
+              </div>
+            </div>
+
+            {/* AI Generator Helper Drawer */}
+            {showAiHelper && (
+              <div className="bg-indigo-950/30 border border-indigo-800/60 rounded-xl p-4 space-y-3 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4" />
+                    Gemini AI로 실무 자동화 코드 초안 생성
+                  </span>
+                  <button
+                    onClick={() => setShowAiHelper(false)}
+                    className="text-slate-400 hover:text-white text-xs"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={aiIdeaPrompt}
+                  onChange={(e) => setAiIdeaPrompt(e.target.value)}
+                  placeholder="예: 식각 챔버 압력 헌팅 시계열 데이터 분석 및 이상 징후 자동 탐지 스크립트"
+                  className="w-full bg-slate-900 border border-indigo-900 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+                {aiError && <p className="text-xs text-rose-400">{aiError}</p>}
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleGenerateAiCode}
+                    disabled={isGeneratingAi || !aiIdeaPrompt.trim()}
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
+                  >
+                    {isGeneratingAi && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{isGeneratingAi ? '생성 중...' : '자동 생성 및 폼에 채우기'}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Submission Form */}
+            <form onSubmit={handleSubmitCode} className="space-y-4">
+              {/* Project Title */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  대표 과제 / 프로젝트 제목
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="예: 웨이퍼 맵 결함 클러스터링 및 FDC 센서 이상 상관분석 자동화 스크립트"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Prompt Strategy */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  LLM에 입력한 핵심 프롬프트 (Prompt Strategy)
+                </label>
+                <textarea
+                  rows={2}
+                  value={promptUsed}
+                  onChange={(e) => setPromptUsed(e.target.value)}
+                  placeholder="예: '반도체 식각 챔버의 RF Power 및 압력 시계열 데이터와 웨이퍼 결함 좌표를 입력받아 이상 챔버를 특정하고 파라미터 보정값을 제안하는 Python 스크립트를 작성해줘...'"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 resize-none font-mono"
+                />
+              </div>
+
+              {/* Language & Code */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-300">
+                    자동화 코드 작성 (라이브 시연 가능)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-slate-400">개발 언어:</span>
+                    <select
+                      value={language}
+                      onChange={(e) => setLanguage(e.target.value as CodeLanguage)}
+                      className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="python">Python (Pyodide 샌드박스)</option>
+                      <option value="javascript">JavaScript / Node</option>
+                      <option value="html">HTML / Interactive</option>
+                      <option value="sql">SQL Query</option>
+                    </select>
                   </div>
+                </div>
+
+                <textarea
+                  rows={10}
+                  required
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="// 여기에 Python, JavaScript 또는 HTML 코드를 작성하세요..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs font-mono text-emerald-400 focus:outline-none focus:border-indigo-500 transition-colors resize-y leading-relaxed"
+                />
+              </div>
+
+              {/* Sample Input */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  테스트용 샘플 인풋 / 데이터셋 (선택사항)
+                </label>
+                <input
+                  type="text"
+                  value={sampleInput}
+                  onChange={(e) => setSampleInput(e.target.value)}
+                  placeholder="예: lot_id: 'LOT-2026-W09', chamber: 'ETCH-CH03', rf_power: 1250"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Live Test Runner Preview Toggle */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRunnerPreview(!showRunnerPreview)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-300 transition-colors"
+                >
+                  <Play className="w-3.5 h-3.5 text-emerald-400 fill-current" />
+                  <span>{showRunnerPreview ? '실행 결과창 닫기' : '실행 결과 미리 테스트하기'}</span>
+                </button>
+
+                {showRunnerPreview && (
+                  <div className="mt-3 p-3 bg-slate-950 rounded-xl border border-slate-800">
+                    <div className="text-[11px] font-bold text-slate-400 mb-2 flex items-center justify-between">
+                      <span>실시간 샌드박스 실행 결과</span>
+                      <span className="font-mono text-indigo-400">{language.toUpperCase()}</span>
+                    </div>
+                    <div className="h-64 rounded-lg overflow-hidden border border-slate-850">
+                      <CodeRunner
+                        code={code}
+                        language={language}
+                        title={title || '과제 실행 테스트'}
+                        sampleInput={sampleInput}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex items-center justify-between pt-4 border-t border-slate-800">
+                <span className="text-xs text-slate-400">
+                  {myTeamSubmission ? '수정 후 다시 제출하시면 업데이트됩니다.' : '제출 후에도 언제든 수정 가능합니다.'}
+                </span>
+
+                <div className="flex items-center gap-3">
+                  {submitSuccess && (
+                    <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 className="w-4 h-4" />
+                      제출 완료!
+                    </span>
+                  )}
 
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-indigo-600/30 transition-all active:scale-95 flex items-center gap-2"
+                    className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-600/30 disabled:opacity-50 active:scale-95"
                   >
                     {isSubmitting ? (
                       <RefreshCw className="w-4 h-4 animate-spin" />
                     ) : (
-                      <CheckCircle2 className="w-4 h-4" />
+                      <Upload className="w-4 h-4" />
                     )}
-                    <span>{myTeamSubmission ? `${teamNumber}조 과제 수정하기` : `${teamNumber}조 대표 과제 제출하기`}</span>
+                    <span>{myTeamSubmission ? '과제 최종 업데이트' : '대표 과제 최종 제출'}</span>
                   </button>
                 </div>
-              </form>
-            </section>
-          </div>
-        ) : (
-          /* ========================================================= */
-          /* TAB 2: CROSS-TEAM VOTING & CODE REVIEW (ONLY VOTE OUTSIDE) */
-          /* ========================================================= */
-          <div className="space-y-4">
-            {/* Voting Notice Banner */}
-            <div className="bg-indigo-950/40 border border-indigo-800/60 rounded-2xl p-4 flex items-start gap-3 shadow-md">
-              <div className="w-8 h-8 rounded-lg bg-indigo-600/20 text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
-                <Heart className="w-4 h-4 text-rose-400 fill-current" />
               </div>
-              <div className="space-y-1 text-xs">
-                <h3 className="font-bold text-white text-sm">전체 조 대표 과제 동료 평가 및 투표</h3>
-                <p className="text-slate-300">
-                  다른 15개 조의 대표 결과물과 코드를 확인하고 가장 혁신적이고 실무 적용성이 뛰어난 조에 투표하세요.
-                </p>
-                <p className="text-slate-500 text-[11px]">
-                  * 각 조의 내부 공유 자료/애셋은 비공개되며, 제출 완료된 대표 과제만 투표 대상입니다.
-                </p>
+            </form>
+          </section>
+        )}
+
+        {/* ================================================================= */}
+        {/* TAB 3: TEAM ASSETS & SHARED MATERIALS (DIVIDED SECTION)            */}
+        {/* ================================================================= */}
+        {activeTab === 'assets' && (
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-4 shadow-lg">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center justify-center">
+                  <FolderLock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                    <span>제 {teamNumber} 조 전용 공유 자료실</span>
+                    <span className="text-[10px] text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-800">
+                      우리 조원 전용
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    프롬프트 메모, 참고 데이터셋, 캡처 스크린샷, 파이썬 코드를 팀원들과 공유하세요.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={fetchTeamAssets}
+                disabled={isLoadingAssets}
+                className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+                title="새로고침"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoadingAssets ? 'animate-spin text-indigo-400' : ''}`} />
+              </button>
+            </div>
+
+            {/* Upload Area */}
+            <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-300">새 자료 등록</span>
+                <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setAssetMode('file')}
+                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                      assetMode === 'file' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    파일/이미지
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAssetMode('text')}
+                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                      assetMode === 'text' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    프롬프트/코드 메모
+                  </button>
+                </div>
+              </div>
+
+              {assetMode === 'file' ? (
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragOver(true);
+                  }}
+                  onDragLeave={() => setIsDragOver(false)}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors ${
+                    isDragOver
+                      ? 'border-indigo-500 bg-indigo-950/20'
+                      : selectedFile
+                      ? 'border-emerald-600/60 bg-emerald-950/10'
+                      : 'border-slate-800 hover:border-slate-700 bg-slate-900/40'
+                  }`}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        processSelectedFile(e.target.files[0]);
+                      }
+                    }}
+                  />
+                  {selectedFile ? (
+                    <div className="flex items-center justify-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center justify-center">
+                        {selectedFile.type === 'image' ? <ImageIcon className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+                      </div>
+                      <div className="text-left">
+                        <p className="text-xs font-bold text-white truncate max-w-xs">{selectedFile.name}</p>
+                        <p className="text-[11px] text-emerald-400 font-mono">{selectedFile.size}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedFile(null);
+                          if (fileInputRef.current) fileInputRef.current.value = '';
+                        }}
+                        className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-slate-800"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Upload className="w-5 h-5 mx-auto text-indigo-400" />
+                      <p className="text-xs font-semibold text-slate-300">
+                        파일을 드래그하거나 클릭하여 업로드
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        이미지, 엑셀, CSV, 파이썬/SQL 스크립트 지원
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <textarea
+                  value={assetContent}
+                  onChange={(e) => setAssetContent(e.target.value)}
+                  placeholder="조원들과 공유할 반도체 결함 분석 프롬프트, FDC 파이프라인 코드, 아이디어 메모를 입력하세요..."
+                  rows={3}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 resize-none"
+                />
+              )}
+
+              {/* Title & Upload Button */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={assetTitle}
+                  onChange={(e) => setAssetTitle(e.target.value)}
+                  placeholder="자료 제목 (예: CMP 평탄화 공정 최적화 프롬프트, 샘플 웨이퍼 데이터셋)"
+                  className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleUploadAsset}
+                  disabled={isUploadingAsset}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{isUploadingAsset ? '업로드 중' : '등록'}</span>
+                </button>
               </div>
             </div>
 
-            {/* Filter Bar */}
-            <div className="flex flex-col sm:flex-row gap-2">
-              <div className="relative flex-1">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            {/* Assets List */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-slate-400 font-semibold px-1">
+                <span>공유된 자료 ({assets.length}건)</span>
+                <span className="text-[10px] text-slate-500">클릭하여 내용 확인 / 다운로드</span>
+              </div>
+
+              {assets.length === 0 ? (
+                <div className="text-center py-6 border border-dashed border-slate-800 rounded-xl text-xs text-slate-500">
+                  아직 등록된 팀 자료가 없습니다. 프롬프트나 참고 코드를 공유해보세요.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {assets.map((asset) => (
+                    <div
+                      key={asset.id}
+                      className="bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl p-3 flex flex-col justify-between gap-2 shadow-sm group"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 flex items-center justify-center shrink-0">
+                            {asset.fileType === 'image' ? (
+                              <ImageIcon className="w-4 h-4 text-purple-400" />
+                            ) : (
+                              <FileText className="w-4 h-4 text-indigo-400" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-bold text-white truncate group-hover:text-indigo-300 transition-colors">
+                              {asset.title}
+                            </h4>
+                            <p className="text-[10px] text-slate-400 truncate">
+                              {asset.fileSize || '텍스트 메모'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleDeleteAsset(asset.id)}
+                          className="text-slate-500 hover:text-rose-400 p-1 rounded transition-colors"
+                          title="삭제"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Image Thumbnail preview if image */}
+                      {asset.dataUrl && asset.fileType === 'image' && (
+                        <div
+                          onClick={() => setPreviewAsset(asset)}
+                          className="h-20 w-full rounded-lg overflow-hidden bg-slate-900 border border-slate-800 cursor-pointer"
+                        >
+                          <img
+                            src={asset.dataUrl}
+                            alt={asset.title}
+                            className="w-full h-full object-cover hover:scale-105 transition-transform"
+                          />
+                        </div>
+                      )}
+
+                      {/* Text preview */}
+                      {asset.content && (
+                        <div
+                          onClick={() => setPreviewAsset(asset)}
+                          className="p-2 bg-slate-900 rounded-lg text-[10px] font-mono text-slate-300 max-h-14 overflow-hidden line-clamp-2 border border-slate-800/80 cursor-pointer hover:border-slate-700"
+                        >
+                          {asset.content}
+                        </div>
+                      )}
+
+                      {/* Card Bottom Actions */}
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-800/60 text-[10px]">
+                        <span className="text-slate-500">
+                          {new Date(asset.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+
+                        <div className="flex items-center gap-1.5">
+                          {asset.dataUrl && (
+                            <a
+                              href={asset.dataUrl}
+                              download={asset.fileName || `${asset.title}.png`}
+                              className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                            >
+                              <Download className="w-3 h-3" />
+                              <span>다운로드</span>
+                            </a>
+                          )}
+                          <button
+                            onClick={() => setPreviewAsset(asset)}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 hover:bg-indigo-900 transition-colors"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>보기</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* ================================================================= */}
+        {/* TAB 4: PEER VOTING & EXPLORE (DIVIDED SECTION)                     */}
+        {/* ================================================================= */}
+        {activeTab === 'voting' && (
+          <section className="space-y-4">
+            {/* Search & Overview Header */}
+            <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-md">
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                  <Heart className="w-4 h-4 text-rose-400 fill-current" />
+                  <span>동료 과제 실시간 투표</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  타 팀의 자동화 코드를 직접 실행해보고 우수한 아이디어에 투표하세요.
+                </p>
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
+                  placeholder="팀명 또는 과제 검색..."
                   value={voteSearchQuery}
                   onChange={(e) => setVoteSearchQuery(e.target.value)}
-                  placeholder="조 번호 (예: 3조), 과제 제목으로 검색..."
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                  className="w-full pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
             </div>
 
-            {/* Submissions Cards List */}
+            {/* Submissions List */}
             {filteredSubmissions.length === 0 ? (
-              <div className="text-center py-12 border border-dashed border-slate-800 rounded-2xl bg-slate-900/30 text-xs text-slate-400 space-y-2">
-                <AlertCircle className="w-6 h-6 mx-auto text-slate-500" />
-                <p className="font-semibold">제출된 과제가 없습니다.</p>
-                <p className="text-slate-500 text-[11px]">
-                  각 조에서 대표 과제를 등록하면 실시간으로 이곳에 노출되어 투표가 진행됩니다.
-                </p>
+              <div className="p-12 text-center bg-slate-900 border border-slate-800 rounded-2xl text-slate-500 text-xs">
+                아직 다른 팀의 제출 과제가 없습니다.
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredSubmissions.map((sub) => {
+                  const isMySubmission = sub.id === myTeamSubmission?.id;
                   const hasVoted = votedIds.has(sub.id);
-                  const isMyTeam = sub.team === `${teamNumber}조` || sub.team === String(teamNumber);
-                  const isCodeExpanded = expandedCodeId === sub.id;
 
                   return (
                     <div
                       key={sub.id}
-                      className={`bg-slate-900 border rounded-2xl p-4 sm:p-5 transition-all shadow-md ${
-                        isMyTeam
-                          ? 'border-indigo-800/80 bg-slate-900/90'
+                      className={`p-4 bg-slate-900 border rounded-2xl shadow-md transition-all flex flex-col justify-between ${
+                        isMySubmission
+                          ? 'border-indigo-500/80 ring-1 ring-indigo-500/30'
                           : 'border-slate-800 hover:border-slate-700'
                       }`}
                     >
-                      {/* Card Header */}
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="px-2 py-0.5 rounded-lg text-xs font-black bg-indigo-600 text-white shadow-sm">
-                              {sub.team}
+                      <div>
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-indigo-600 text-white">
+                              {formatTeamName(sub.team)}
                             </span>
-                            <span className="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-slate-800 text-slate-300 border border-slate-700 font-mono">
-                              {sub.language}
+                            <span className="text-[10px] font-mono text-slate-400">
+                              {formatTeamHandle(sub.team)}
                             </span>
-                            {isMyTeam && (
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-950 text-indigo-400 border border-indigo-800">
-                                우리 팀
-                              </span>
-                            )}
                           </div>
 
-                          <h3 className="text-sm sm:text-base font-bold text-white">
-                            {sub.title}
-                          </h3>
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-slate-950 text-cyan-400 border border-slate-800 uppercase">
+                            {sub.language}
+                          </span>
+                        </div>
 
-                          <p className="text-xs text-slate-400">
-                            기대 효과: <span className="text-emerald-400 font-medium">{sub.productivityImpact}</span>
+                        <h4 className="text-sm font-bold text-white tracking-tight line-clamp-2">
+                          {sub.title}
+                        </h4>
+
+                        {sub.productivityImpact && (
+                          <p className="text-xs text-emerald-400 font-medium mt-1">
+                            ⚡ {sub.productivityImpact}
                           </p>
-                        </div>
+                        )}
 
-                        {/* Vote Button */}
-                        <div className="flex flex-col items-end gap-1 shrink-0">
-                          <button
-                            onClick={() => onVote(sub.id)}
-                            disabled={!isVotingOpen}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                              hasVoted
-                                ? 'bg-rose-950 text-rose-300 border border-rose-800'
-                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700'
-                            } ${!isVotingOpen ? 'opacity-50 cursor-not-allowed' : 'active:scale-95'}`}
-                          >
-                            <Heart className={`w-3.5 h-3.5 ${hasVoted ? 'fill-current text-rose-400' : ''}`} />
-                            <span>{sub.votes}표</span>
-                          </button>
-                        </div>
+                        {/* Prompt Strategy Snippet */}
+                        {sub.promptUsed && (
+                          <div className="mt-2.5 p-2 bg-slate-950/80 rounded-xl border border-slate-800 text-[11px] text-slate-300 font-mono line-clamp-2">
+                            💬 {sub.promptUsed}
+                          </div>
+                        )}
                       </div>
 
-                      {/* Prompt preview snippet */}
-                      {sub.promptUsed && (
-                        <div className="mt-3 p-2.5 bg-slate-950 rounded-xl border border-slate-800/80 text-[11px] font-mono text-slate-400 line-clamp-2">
-                          <span className="text-slate-500 mr-1 font-sans font-bold">프롬프트:</span>
-                          {sub.promptUsed}
-                        </div>
-                      )}
+                      {/* Card Bottom Actions */}
+                      <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-800 text-xs">
+                        <button
+                          onClick={() => {
+                            if (onSelectSubmission) onSelectSubmission(sub);
+                            else setExpandedCodeId(expandedCodeId === sub.id ? null : sub.id);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-semibold transition-colors"
+                        >
+                          <Play className="w-3.5 h-3.5 text-emerald-400 fill-current" />
+                          <span>코드 실행</span>
+                        </button>
 
-                      {/* Expandable Code & Live Demo */}
-                      {isCodeExpanded && (
-                        <div className="mt-3 space-y-2 animate-in fade-in">
-                          <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl">
-                            <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-                              <span>소스코드 ({sub.language})</span>
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(sub.code);
-                                  alert('코드가 클립보드에 복사되었습니다.');
-                                }}
-                                className="text-indigo-400 hover:text-indigo-300"
-                              >
-                                복사하기
-                              </button>
-                            </div>
-                            <pre className="text-xs font-mono text-emerald-300 max-h-48 overflow-y-auto p-2 bg-slate-900 rounded-lg">
-                              {sub.code}
-                            </pre>
-                          </div>
-                          <CodeRunner code={sub.code} language={sub.language} isExpanded={true} />
-                        </div>
-                      )}
-
-                      {/* Actions Bar & Peer Reactions */}
-                      <div className="mt-3 pt-3 border-t border-slate-800/70 flex items-center justify-between gap-2 flex-wrap">
-                        {/* Peer Reactions */}
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <button
-                            onClick={() => onVote(sub.id, 'productivity')}
-                            disabled={!isVotingOpen}
-                            className="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 transition-colors flex items-center gap-1"
-                          >
-                            <Zap className="w-3 h-3 text-amber-400" />
-                            <span>생산성 {sub.reactions?.productivity || 0}</span>
-                          </button>
-                          <button
-                            onClick={() => onVote(sub.id, 'prompt')}
-                            disabled={!isVotingOpen}
-                            className="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 transition-colors flex items-center gap-1"
-                          >
-                            <Lightbulb className="w-3 h-3 text-indigo-400" />
-                            <span>프롬프트 {sub.reactions?.prompt || 0}</span>
-                          </button>
-                          <button
-                            onClick={() => onVote(sub.id, 'practical')}
-                            disabled={!isVotingOpen}
-                            className="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 transition-colors flex items-center gap-1"
-                          >
-                            <Wrench className="w-3 h-3 text-emerald-400" />
-                            <span>실무적용 {sub.reactions?.practical || 0}</span>
-                          </button>
-                        </div>
-
-                        {/* Code Toggle & Stage Modal */}
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setExpandedCodeId(isCodeExpanded ? null : sub.id)}
-                            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors flex items-center gap-1"
-                          >
-                            <CodeIcon className="w-3.5 h-3.5 text-indigo-400" />
-                            <span>{isCodeExpanded ? '코드 접기' : '코드/시연'}</span>
-                          </button>
-
-                          <button
-                            onClick={() => onSelectSubmission(sub)}
-                            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors flex items-center gap-1"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>상세보기</span>
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => onVote(sub.id)}
+                          disabled={!isVotingOpen}
+                          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-bold transition-all ${
+                            hasVoted
+                              ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30 scale-105'
+                              : 'bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-rose-400'
+                          }`}
+                        >
+                          <Heart className={`w-3.5 h-3.5 ${hasVoted ? 'fill-current' : ''}`} />
+                          <span>{sub.votes}표</span>
+                        </button>
                       </div>
                     </div>
                   );
                 })}
               </div>
             )}
-          </div>
+          </section>
+        )}
+
+        {/* ================================================================= */}
+        {/* TAB 4: SAMPLE DATASETS FOR CSV DOWNLOAD (STUDENT SIMPLE VIEW)     */}
+        {/* ================================================================= */}
+        {activeTab === 'datasets' && (
+          <ParticipantDatasetList
+            datasets={datasets}
+            onOpenDashboard={() => setActiveTab('dashboard')}
+          />
+        )}
+
+        {/* ================================================================= */}
+        {/* TAB 5: SAMPLE DASHBOARD BENCHMARK (LIVE DEMO FOR STUDENTS)        */}
+        {/* ================================================================= */}
+        {activeTab === 'dashboard' && (
+          <SampleWaferDashboard
+            dataset={
+              datasets.find(
+                (d) => d.id === 'dataset-wafer-defect-map-spatial' || d.fileName.includes('wafer_300mm')
+              ) || datasets[0]
+            }
+            onNavigateToSubmit={() => setActiveTab('code')}
+            isEmbedded={true}
+          />
         )}
       </main>
 
-      {/* ================= ASSET PREVIEW MODAL ================= */}
+      {/* Asset Preview Modal */}
       {previewAsset && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90">
-              <div>
-                <h3 className="text-sm font-bold text-white">{previewAsset.title}</h3>
-                <p className="text-xs text-slate-400">
-                  {previewAsset.uploadedBy} · {new Date(previewAsset.createdAt).toLocaleString()}
-                </p>
-              </div>
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-bold text-white truncate">{previewAsset.title}</h3>
               <button
                 onClick={() => setPreviewAsset(null)}
-                className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center"
+                className="text-slate-400 hover:text-white text-sm"
               >
                 ✕
               </button>
             </div>
 
-            <div className="p-4 flex-1 overflow-y-auto space-y-3">
-              {previewAsset.dataUrl && previewAsset.fileType === 'image' && (
-                <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950">
-                  <img src={previewAsset.dataUrl} alt={previewAsset.title} className="w-full h-auto object-contain max-h-96" />
-                </div>
-              )}
+            {previewAsset.fileType === 'image' && previewAsset.dataUrl ? (
+              <div className="max-h-[60vh] overflow-auto rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center">
+                <img
+                  src={previewAsset.dataUrl}
+                  alt={previewAsset.title}
+                  className="max-h-[55vh] object-contain"
+                />
+              </div>
+            ) : (
+              <div className="max-h-[50vh] overflow-auto p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs font-mono text-slate-200 whitespace-pre-wrap">
+                {previewAsset.content || '내용이 없습니다.'}
+              </div>
+            )}
 
-              {previewAsset.content && (
-                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-                  <pre className="text-xs font-mono text-emerald-300 whitespace-pre-wrap">
-                    {previewAsset.content}
-                  </pre>
-                </div>
-              )}
-            </div>
-
-            <div className="p-3 border-t border-slate-800 bg-slate-900/90 flex justify-end gap-2">
-              {previewAsset.content && (
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(previewAsset.content || '');
-                    alert('내용이 복사되었습니다.');
-                  }}
-                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-white transition-colors"
-                >
-                  내용 복사
-                </button>
-              )}
+            <div className="flex justify-end gap-2 pt-2">
               {previewAsset.dataUrl && (
                 <a
                   href={previewAsset.dataUrl}
                   download={previewAsset.fileName || `${previewAsset.title}.png`}
-                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors flex items-center gap-1"
                 >
-                  다운로드
+                  <Download className="w-3.5 h-3.5" />
+                  <span>다운로드</span>
                 </a>
               )}
               <button
                 onClick={() => setPreviewAsset(null)}
-                className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
               >
                 닫기
               </button>

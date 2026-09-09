@@ -1,31 +1,21 @@
 import { TeamActivity, CodeSubmission, ProductivityCategory } from '../types';
 
 const DEFAULT_CATEGORIES: ProductivityCategory[] = [
-  'excel_automation',
-  'email_document',
-  'data_analysis',
-  'cs_support',
-  'internal_tools',
-  'workflow_macro',
-  'excel_automation',
-  'email_document',
-  'data_analysis',
-  'cs_support',
-  'internal_tools',
-  'workflow_macro',
-  'excel_automation',
-  'email_document',
-  'data_analysis',
+  'yield_defect',
+  'process_optimization',
+  'equipment_fdc',
+  'metrology_qa',
+  'lot_logistics',
+  'utility_safety',
 ];
 
-export const INITIAL_15_TEAMS: TeamActivity[] = Array.from({ length: 15 }, (_, i) => {
-  const teamNumber = i + 1;
+export function createDefaultTeam(teamNumber: number): TeamActivity {
   return {
     id: `team-${teamNumber}`,
     teamNumber,
-    teamName: `${teamNumber}조`,
+    teamName: `제 ${teamNumber} 조`,
     slogan: '',
-    category: DEFAULT_CATEGORIES[i] || 'workflow_macro',
+    category: DEFAULT_CATEGORIES[(teamNumber - 1) % DEFAULT_CATEGORIES.length],
     presentationMinutes: 3,
     presentationStatus: 'waiting',
     totalTeamVotes: 0,
@@ -38,6 +28,11 @@ export const INITIAL_15_TEAMS: TeamActivity[] = Array.from({ length: 15 }, (_, i
       promptQuality: 0,
     },
   };
-});
+}
 
+export function getInitialTeams(count: number = 15): TeamActivity[] {
+  return Array.from({ length: count }, (_, i) => createDefaultTeam(i + 1));
+}
+
+export const INITIAL_15_TEAMS: TeamActivity[] = getInitialTeams(15);
 export const INITIAL_SUBMISSIONS: CodeSubmission[] = [];

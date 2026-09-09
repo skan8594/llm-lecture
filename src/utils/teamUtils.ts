@@ -1,6 +1,7 @@
 /**
- * Utility functions for standardized, formal team nomenclature
- * Format: "제 1 분임조", "제 2 분임조", ..., "제 15 분임조"
+ * Utility functions for standardized team nomenclature
+ * Format: "제 1 조", "제 2 조", etc. (Without using '분임조')
+ * Supports dynamic team counts.
  */
 
 export function getTeamNumber(team: string | number | undefined | null): number {
@@ -11,10 +12,10 @@ export function getTeamNumber(team: string | number | undefined | null): number 
 }
 
 export function formatTeamName(team: string | number | undefined | null): string {
-  if (!team || team === 'ALL') return '전체 분임조';
+  if (!team || team === 'ALL') return '전체 팀';
   const num = getTeamNumber(team);
-  if (num >= 1 && num <= 15) {
-    return `제 ${num} 분임조`;
+  if (num > 0) {
+    return `제 ${num} 조`;
   }
   return String(team);
 }
@@ -23,5 +24,3 @@ export function formatTeamHandle(team: string | number | undefined | null): stri
   const num = getTeamNumber(team);
   return `@team_${String(num).padStart(2, '0')}`;
 }
-
-export const ALL_15_TEAM_NAMES = Array.from({ length: 15 }, (_, i) => `제 ${i + 1} 분임조`);

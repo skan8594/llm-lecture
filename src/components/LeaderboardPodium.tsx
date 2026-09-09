@@ -45,7 +45,7 @@ export const LeaderboardPodium: React.FC<LeaderboardPodiumProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            15개 분임조의 실시간 득표 순위 상위 과제입니다.
+            실시간 최다 득표 상위 과제입니다.
           </p>
         </div>
 

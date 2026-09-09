@@ -41,12 +41,12 @@ interface TeamPresentationStageProps {
 }
 
 const CATEGORY_LABELS: Record<ProductivityCategory, string> = {
-  excel_automation: '📊 엑셀/데이터 자동화',
-  email_document: '✉️ 이메일/문서 자동화',
-  data_analysis: '📈 데이터 분석 및 쿼리',
-  cs_support: '💬 CS/고객 응대 자동화',
-  internal_tools: '🛠️ 사내 도구 & 온보딩',
-  workflow_macro: '⚡ 반복 업무 매크로',
+  yield_defect: '🔬 수율 분석 & 결함 개선',
+  process_optimization: '⚙️ 공정 파라미터 최적화',
+  equipment_fdc: '🛡️ 설비 예지보전 & FDC',
+  metrology_qa: '📐 계측 & 품질 검사',
+  lot_logistics: '🔄 웨이퍼 물류 & Q-Time',
+  utility_safety: '⚡ FAB 유틸리티 & 환경안전',
 };
 
 export const TeamPresentationStage: React.FC<TeamPresentationStageProps> = ({
@@ -205,11 +205,11 @@ export const TeamPresentationStage: React.FC<TeamPresentationStageProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-extrabold text-white tracking-tight">
-                  15개 조별 LLM 생산성 활동 발표 무대
+                  팀별 LLM 생산성 활동 발표 무대
                 </h1>
               </div>
               <p className="text-xs text-slate-400">
-                15개 조 (1~15조) · 실무 자동화 해결책 발표 & 실시간 코드 즉시 구동
+                실무 자동화 해결책 발표 & 실시간 코드 즉시 구동
               </p>
             </div>
           </div>
@@ -264,13 +264,13 @@ export const TeamPresentationStage: React.FC<TeamPresentationStageProps> = ({
               </div>
             </div>
 
-            {/* 15 Teams Leaderboard Drawer Button */}
+            {/* Leaderboard Drawer Button */}
             <button
               onClick={() => setShowRankingModal(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-950/40 hover:bg-amber-900/50 border border-amber-600/50 text-amber-300 rounded-xl text-xs font-bold transition-all shadow-sm"
             >
               <Trophy className="w-3.5 h-3.5 text-amber-400" />
-              15팀 종합 랭킹
+              팀 종합 랭킹
             </button>
 
             {/* Exit Stage Button */}
@@ -335,7 +335,7 @@ export const TeamPresentationStage: React.FC<TeamPresentationStageProps> = ({
                 </span>
               )}
               <span className="text-xs text-slate-400">
-                신입사원 LLM 생산성 해커톤 발표 과제
+                반도체 제조 혁신 LLM 발표 과제
               </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
@@ -414,7 +414,7 @@ export const TeamPresentationStage: React.FC<TeamPresentationStageProps> = ({
             <div className="p-4 bg-slate-900/90 border border-slate-800 rounded-2xl space-y-2 shadow-md">
               <div className="flex items-center gap-2 text-xs font-bold text-rose-400">
                 <span className="w-2 h-2 rounded-full bg-rose-500" />
-                신입사원이 겪은 실무 업무 Pain Point (Before)
+                반도체 공정/설비 실무 Pain Point (Before)
               </div>
               <p className="text-sm text-slate-200 leading-relaxed font-medium">
                 {teamProblem}
@@ -692,7 +692,7 @@ export const TeamPresentationStage: React.FC<TeamPresentationStageProps> = ({
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <Trophy className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-black text-white">15개 조 실시간 득표 & 발표 종합 랭킹</h3>
+                <h3 className="text-base font-black text-white">실시간 득표 & 발표 종합 랭킹</h3>
               </div>
               <button
                 onClick={() => setShowRankingModal(false)}
