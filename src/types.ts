@@ -38,7 +38,7 @@ export interface CodeSubmission {
 }
 
 export interface TrainingSessionConfig {
-  totalTargetTeams: number; // 15개 조
+  totalTargetTeams: number; // 32개 조
   trainingTitle: string;
   instructorName: string;
   isVotingOpen: boolean;
@@ -68,10 +68,12 @@ export interface TeamMember {
 
 export interface TeamActivity {
   id: string;                      // e.g. "team-1"
-  teamNumber: number;              // 1 ~ 15
-  teamName: string;                // e.g. "1조 · 스마트 엑셀 자동화팀"
-  slogan: string;                  // e.g. "수작업 0%, 신입사원 칼퇴 100%"
+  teamNumber: number;              // 1 ~ 32
+  teamName: string;                // e.g. "제 1 조"
+  slogan: string;                  // e.g. "웨이퍼 결함률 0% 도전"
   category?: ProductivityCategory;
+  isRegistered?: boolean;          // 팀 정보 제출/등록 여부
+  submittedAt?: number;            // 팀 정보 제출 시각
   members?: TeamMember[];
   problemStatement?: string;        // 해결한 업무 Pain Point (Before)
   llmPromptStrategy?: string;       // LLM 프롬프트 및 해결 전략

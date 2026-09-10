@@ -204,9 +204,9 @@ export const MobileSubmissionView: React.FC<MobileSubmissionViewProps> = ({
           }`}
         >
           <Users className="w-3.5 h-3.5" />
-          15개 조 활동
+          {teams.length || 32}개 조 활동
           <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-900 text-indigo-200">
-            {teams.length || 15}
+            {teams.length || 32}
           </span>
         </button>
 
@@ -273,7 +273,7 @@ export const MobileSubmissionView: React.FC<MobileSubmissionViewProps> = ({
                 <span className="p-1.5 rounded-lg bg-indigo-600/30 text-indigo-300">
                   <Users className="w-4 h-4" />
                 </span>
-                <h3 className="text-sm font-bold text-white">15개 조별 실무 자동화 발표회</h3>
+                <h3 className="text-sm font-bold text-white">{teams.length || 32}개 조별 실무 자동화 발표회</h3>
               </div>
               <p className="text-xs text-slate-300 leading-relaxed">
                 현재 대형 스크린에서 발표 중인 조를 확인하고, 4가지 항목으로 실시간 피어 평가를 남겨주세요.
@@ -580,7 +580,7 @@ export const MobileSubmissionView: React.FC<MobileSubmissionViewProps> = ({
                       onChange={(e) => setTeam(e.target.value)}
                       className="w-full text-xs p-2.5 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-indigo-500"
                     >
-                      {Array.from({ length: 15 }, (_, i) => `${i + 1}조`).map((t) => (
+                      {Array.from({ length: teams.length || 32 }, (_, i) => `${i + 1}조`).map((t) => (
                         <option key={t} value={t}>
                           {t}
                         </option>
@@ -760,7 +760,7 @@ export const MobileSubmissionView: React.FC<MobileSubmissionViewProps> = ({
                 >
                   전체
                 </button>
-                {Array.from({ length: 15 }, (_, i) => `${i + 1}조`).map((t) => (
+                {Array.from({ length: teams.length || 32 }, (_, i) => `${i + 1}조`).map((t) => (
                   <button
                     key={t}
                     onClick={() => setSelectedTeamFilter(t)}
@@ -968,7 +968,7 @@ export const MobileSubmissionView: React.FC<MobileSubmissionViewProps> = ({
             <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl text-center space-y-1">
               <Trophy className="w-8 h-8 text-amber-400 mx-auto" />
               <h3 className="text-sm font-bold text-white">실시간 최다 득표 순위</h3>
-              <p className="text-xs text-slate-400">15개 조가 실시간으로 선정한 베스트 코드입니다.</p>
+              <p className="text-xs text-slate-400">전체 참가 조가 실시간으로 선정한 베스트 코드입니다.</p>
             </div>
 
             <div className="space-y-2">

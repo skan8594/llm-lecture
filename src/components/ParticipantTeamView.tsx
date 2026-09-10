@@ -45,6 +45,9 @@ interface ParticipantTeamViewProps {
   isVotingOpen: boolean;
   onSelectSubmission?: (sub: CodeSubmission) => void;
   onUpdateTeamInfo?: (updatedFields: Partial<TeamActivity>) => void;
+  firebaseConnected?: boolean;
+  sessionId?: string;
+  onOpenFirebaseModal?: () => void;
 }
 
 const CATEGORY_LABELS: Record<ProductivityCategory, string> = {
@@ -67,6 +70,9 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
   isVotingOpen,
   onSelectSubmission,
   onUpdateTeamInfo,
+  firebaseConnected = true,
+  sessionId = '2026onboarding',
+  onOpenFirebaseModal,
 }) => {
   // Navigation Tabs: 'info' | 'code' | 'assets' | 'datasets' | 'dashboard' | 'voting'
   const [activeTab, setActiveTab] = useState<'info' | 'code' | 'assets' | 'datasets' | 'dashboard' | 'voting'>('info');
@@ -372,8 +378,21 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
             </div>
           </div>
 
-          {/* Submission status pill */}
-          <div>
+          {/* Status and Firebase Pill */}
+          <div className="flex items-center gap-2">
+            {onOpenFirebaseModal && (
+              <button
+                onClick={onOpenFirebaseModal}
+                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl transition-all"
+                title="Firebase 2026onboarding 실시간 동기화 상태 확인"
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span className="font-mono text-[11px]">Firebase: {sessionId}</span>
+              </button>
+            )}
             {myTeamSubmission ? (
               <span className="px-2.5 py-1 text-xs font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-800 rounded-xl flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" />

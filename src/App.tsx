@@ -9,9 +9,24 @@ import { PresenterDashboard } from './components/PresenterDashboard';
 import { ParticipantTeamView } from './components/ParticipantTeamView';
 import { SubmissionModal } from './components/SubmissionModal';
 import { TeamPresentationStage } from './components/TeamPresentationStage';
-import { INITIAL_15_TEAMS, INITIAL_SUBMISSIONS, createDefaultTeam } from './data/teamData';
+import { INITIAL_15_TEAMS, INITIAL_SUBMISSIONS, createDefaultTeam, isTeamSubmitted } from './data/teamData';
 import { getInitialDatasets } from './data/sampleDatasets';
-import { Users, Laptop, ArrowRight, ExternalLink, Sparkles } from 'lucide-react';
+import { Users, Laptop, ArrowRight, ExternalLink, Sparkles, Database } from 'lucide-react';
+import {
+  DEFAULT_SESSION_ID,
+  subscribeToSubmissions,
+  subscribeToTeams,
+  subscribeToDatasets,
+  subscribeToSessionConfig,
+  saveSubmissionToFirebase,
+  updateTeamInFirebase,
+  saveDatasetToFirebase,
+  recordVoteInFirebase,
+  updateSessionConfigInFirebase,
+  seedSessionIfEmpty,
+  testConnection,
+} from './utils/firebase';
+import { FirebaseStatusModal } from './components/FirebaseStatusModal';
 
 // Helper to parse team from URL:
 // ?team=0 -> Presenter (강사용)
@@ -88,13 +103,38 @@ export default function App() {
     return INITIAL_SUBMISSIONS;
   });
 
-  // Teams state with LocalStorage persistence
+  // Normalization helper: ensures unsubmitted teams have no arbitrary category
+  const sanitizeTeam = (t: TeamActivity, subs: CodeSubmission[]): TeamActivity => {
+    const hasSub = isTeamSubmitted(t, subs);
+    if (!hasSub) {
+      return { ...t, category: undefined, isRegistered: false };
+    }
+    return { ...t, isRegistered: true };
+  };
+
+  // Teams state with LocalStorage persistence (up to 32 teams)
   const [teams, setTeams] = useState<TeamActivity[]>(() => {
     const cached = localStorage.getItem('semiconductor_mfg_v1_teams');
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const cleaned = parsed.map((t: TeamActivity) => {
+            const hasSub = isTeamSubmitted(t);
+            return hasSub ? { ...t, isRegistered: true } : { ...t, category: undefined, isRegistered: false };
+          });
+          if (cleaned.length < 32) {
+            const existingNumbers = new Set(cleaned.map((t: TeamActivity) => t.teamNumber));
+            const additions: TeamActivity[] = [];
+            for (let i = 1; i <= 32; i++) {
+              if (!existingNumbers.has(i)) {
+                additions.push(createDefaultTeam(i));
+              }
+            }
+            return [...cleaned, ...additions].sort((a, b) => a.teamNumber - b.teamNumber);
+          }
+          return cleaned;
+        }
       } catch (e) {}
     }
     return INITIAL_15_TEAMS;
@@ -125,7 +165,7 @@ export default function App() {
   });
 
   const [sessionConfig, setSessionConfig] = useState<TrainingSessionConfig>({
-    totalTargetTeams: 15,
+    totalTargetTeams: 32,
     trainingTitle: '반도체 제조 혁신 LLM 생산성 극대화 발표회',
     instructorName: '반도체 AI 디렉터',
     isVotingOpen: true,
@@ -144,6 +184,93 @@ export default function App() {
   // Modal states
   const [selectedSubmission, setSelectedSubmission] = useState<CodeSubmission | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Active Firebase Session ID (Defaults to 2026onboarding)
+  const [sessionId, setSessionId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const sessionParam = params.get('session');
+      if (sessionParam) return sessionParam;
+      return localStorage.getItem('semiconductor_active_session_id') || DEFAULT_SESSION_ID;
+    }
+    return DEFAULT_SESSION_ID;
+  });
+  const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
+  const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState<boolean>(false);
+
+  // Realtime Firebase Firestore synchronization for 2026onboarding
+  useEffect(() => {
+    let unsubSubs: (() => void) | undefined;
+    let unsubTeams: (() => void) | undefined;
+    let unsubDatasets: (() => void) | undefined;
+    let unsubConfig: (() => void) | undefined;
+
+    testConnection()
+      .then((connected) => {
+        setIsFirebaseConnected(connected);
+        return seedSessionIfEmpty(
+          sessionId,
+          INITIAL_15_TEAMS,
+          INITIAL_SUBMISSIONS,
+          getInitialDatasets(),
+          sessionConfig
+        );
+      })
+      .then(() => {
+        unsubSubs = subscribeToSubmissions(sessionId, (remoteSubs) => {
+          if (remoteSubs && remoteSubs.length > 0) {
+            setSubmissions(remoteSubs);
+            setSelectedSubmission((prev) => {
+              if (!prev) return null;
+              return remoteSubs.find((s) => s.id === prev.id) || prev;
+            });
+          }
+        });
+
+        unsubTeams = subscribeToTeams(sessionId, (remoteTeams) => {
+          if (remoteTeams && remoteTeams.length > 0) {
+            const sanitized = remoteTeams.map((t) => sanitizeTeam(t, submissions));
+            if (sanitized.length < 32) {
+              const existingNumbers = new Set(sanitized.map((t) => t.teamNumber));
+              const additions: TeamActivity[] = [];
+              for (let i = 1; i <= 32; i++) {
+                if (!existingNumbers.has(i)) {
+                  const newT = createDefaultTeam(i);
+                  additions.push(newT);
+                  updateTeamInFirebase(sessionId, newT).catch(() => {});
+                }
+              }
+              const merged = [...sanitized, ...additions].sort((a, b) => a.teamNumber - b.teamNumber);
+              setTeams(merged);
+            } else {
+              setTeams(sanitized);
+            }
+          }
+        });
+
+        unsubDatasets = subscribeToDatasets(sessionId, (remoteDatasets) => {
+          if (remoteDatasets && remoteDatasets.length > 0) {
+            setDatasets(remoteDatasets);
+          }
+        });
+
+        unsubConfig = subscribeToSessionConfig(sessionId, (remoteConfig) => {
+          if (remoteConfig) {
+            setSessionConfig(remoteConfig);
+          }
+        });
+      })
+      .catch((err) => {
+        console.warn('Firebase sync notice:', err);
+      });
+
+    return () => {
+      if (unsubSubs) unsubSubs();
+      if (unsubTeams) unsubTeams();
+      if (unsubDatasets) unsubDatasets();
+      if (unsubConfig) unsubConfig();
+    };
+  }, [sessionId]);
 
   // Persist teams and submissions to localStorage for GitHub Pages compatibility
   useEffect(() => {
@@ -300,6 +427,11 @@ export default function App() {
       }
     }
 
+    // Sync to Firestore for 2026onboarding
+    const currentSub = submissions.find((s) => s.id === id);
+    const newVotesTotal = Math.max(0, (currentSub?.votes || 0) + delta);
+    recordVoteInFirebase(sessionId, id, voterToken, newVotesTotal).catch(() => {});
+
     // Try API call if backend is active
     try {
       const res = await fetch(`/api/submissions/${id}/vote`, {
@@ -348,7 +480,7 @@ export default function App() {
             presentation: 0,
             promptQuality: 0,
           };
-          return {
+          const updatedTeam: TeamActivity = {
             ...t,
             totalTeamVotes: Math.max(0, t.totalTeamVotes + delta),
             feedbackTags: category
@@ -358,6 +490,8 @@ export default function App() {
                 }
               : currentFeedbacks,
           };
+          updateTeamInFirebase(sessionId, updatedTeam).catch(() => {});
+          return updatedTeam;
         }
         return t;
       })
@@ -370,7 +504,14 @@ export default function App() {
     status: 'waiting' | 'presenting' | 'completed'
   ) => {
     setTeams((prev) =>
-      prev.map((t) => (t.id === teamId ? { ...t, presentationStatus: status } : t))
+      prev.map((t) => {
+        if (t.id === teamId) {
+          const updated = { ...t, presentationStatus: status };
+          updateTeamInFirebase(sessionId, updated).catch(() => {});
+          return updated;
+        }
+        return t;
+      })
     );
   };
 
@@ -405,6 +546,9 @@ export default function App() {
       reactions: { productivity: 0, prompt: 0, practical: 0, ui: 0, fast: 0, creative: 0, wellPrompted: 0 },
     };
 
+    // Save to Firestore
+    saveSubmissionToFirebase(sessionId, newSubmission).catch(() => {});
+
     setSubmissions((prev) => {
       const existingIdx = prev.findIndex((s) => s.team === newSubmission.team);
       if (existingIdx >= 0) {
@@ -424,15 +568,19 @@ export default function App() {
     setTeams((prev) =>
       prev.map((t) => {
         if (`${t.teamNumber}조` === newSubmission.team || String(t.teamNumber) === newSubmission.team) {
-          return {
+          const updated: TeamActivity = {
             ...t,
             code: newSubmission.code,
             language: newSubmission.language,
             productivityImpact: newSubmission.productivityImpact,
             llmPromptStrategy: newSubmission.promptUsed,
-            category: newSubmission.category,
+            category: newSubmission.category || t.category,
             representativeSubmissionId: newSubmission.id,
+            isRegistered: true,
+            submittedAt: t.submittedAt || Date.now(),
           };
+          updateTeamInFirebase(sessionId, updated).catch(() => {});
+          return updated;
         }
         return t;
       })
@@ -455,15 +603,27 @@ export default function App() {
   const handleUpdateTeamInfo = (teamNum: number, updatedFields: Partial<TeamActivity>) => {
     setTeams((prev) => {
       const existingIdx = prev.findIndex((t) => t.teamNumber === teamNum);
+      const isRegistered = true;
+      const submittedAt = Date.now();
       if (existingIdx !== -1) {
         const copy = [...prev];
-        copy[existingIdx] = { ...copy[existingIdx], ...updatedFields };
+        const updated: TeamActivity = {
+          ...copy[existingIdx],
+          ...updatedFields,
+          isRegistered,
+          submittedAt: copy[existingIdx].submittedAt || submittedAt,
+        };
+        copy[existingIdx] = updated;
+        updateTeamInFirebase(sessionId, updated).catch(() => {});
         return copy;
       } else {
         const newTeam: TeamActivity = {
           ...createDefaultTeam(teamNum),
           ...updatedFields,
+          isRegistered,
+          submittedAt,
         };
+        updateTeamInFirebase(sessionId, newTeam).catch(() => {});
         return [...prev, newTeam];
       }
     });
@@ -471,7 +631,9 @@ export default function App() {
 
   // Admin: Toggle Voting Status
   const handleToggleVoting = async () => {
-    setSessionConfig((prev) => ({ ...prev, isVotingOpen: !prev.isVotingOpen }));
+    const updated = !sessionConfig.isVotingOpen;
+    setSessionConfig((prev) => ({ ...prev, isVotingOpen: updated }));
+    updateSessionConfigInFirebase(sessionId, { ...sessionConfig, isVotingOpen: updated }).catch(() => {});
     try {
       await fetch('/api/admin/toggle-voting', { method: 'POST' });
     } catch (e) {}
@@ -505,6 +667,7 @@ export default function App() {
       uploadedAt: Date.now(),
     };
     setDatasets((prev) => [localItem, ...prev]);
+    saveDatasetToFirebase(sessionId, localItem).catch(() => {});
 
     try {
       const res = await fetch('/api/datasets', {
@@ -556,7 +719,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `llm_hackathon_15teams_data_${Date.now()}.json`;
+    link.download = `llm_hackathon_32teams_data_${Date.now()}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -632,6 +795,9 @@ export default function App() {
           onStartTeamPresentation={handleStartTeamPresentation}
           onExportJson={handleExportJson}
           onImportJson={handleImportJson}
+          firebaseConnected={isFirebaseConnected}
+          sessionId={sessionId}
+          onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
         />
       ) : currentTeamNumber !== null && currentTeamNumber >= 1 ? (
         <ParticipantTeamView
@@ -648,15 +814,30 @@ export default function App() {
           isVotingOpen={sessionConfig.isVotingOpen}
           onSelectSubmission={(sub) => setSelectedSubmission(sub)}
           onUpdateTeamInfo={(fields) => handleUpdateTeamInfo(currentTeamNumber, fields)}
+          firebaseConnected={isFirebaseConnected}
+          sessionId={sessionId}
+          onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
         />
       ) : (
         /* Team Selection Gateway (when no team is specified in URL) */
         <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 sm:p-8">
-          <div className="max-w-3xl w-full space-y-6">
+          <div className="max-w-6xl w-full space-y-6">
             <div className="text-center space-y-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-950/80 border border-indigo-700/60 text-indigo-300 text-xs font-semibold">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>팀별 전용 URL 분리 시스템</span>
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-950/80 border border-indigo-700/60 text-indigo-300 text-xs font-semibold">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>팀별 전용 URL 분리 시스템 (총 32개 조)</span>
+                </div>
+                <button
+                  onClick={() => setIsFirebaseModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-all"
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span className="font-mono">Firebase: {sessionId}</span>
+                </button>
               </div>
               <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
                 반도체 제조 혁신 LLM 생산성 해커톤
@@ -698,33 +879,64 @@ export default function App() {
 
             {/* Teams Selection Grid */}
             <div className="space-y-2">
-              <h3 className="text-xs font-bold text-slate-400 px-1">
-                팀별 교육생 워크스페이스
-              </h3>
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-slate-300">
+                    팀별 교육생 워크스페이스
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800">
+                    취합 완료: {teams.filter((t) => isTeamSubmitted(t, submissions)).length} / 32팀
+                  </span>
+                </div>
+                <span className="text-[11px] font-medium text-slate-500">
+                  최대 32개 조 (제출 기준 실시간 취합)
+                </span>
+              </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
-                {teams.map((t) => (
-                  <div
-                    key={t.id}
-                    onClick={() => navigateToTeam(t.teamNumber)}
-                    className="p-3 bg-slate-900/90 hover:bg-slate-850 border border-slate-800 hover:border-indigo-600/80 rounded-xl cursor-pointer transition-all hover:scale-[1.02] shadow-sm flex flex-col justify-between gap-1.5 group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="w-6 h-6 rounded-lg bg-indigo-600/20 text-indigo-400 text-xs font-black flex items-center justify-center">
-                        {t.teamNumber}
-                      </span>
-                      <span className="text-[10px] font-mono text-slate-500">team{t.teamNumber}</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+                {teams.map((t) => {
+                  const hasSubmitted = isTeamSubmitted(t, submissions);
+                  return (
+                    <div
+                      key={t.id}
+                      onClick={() => navigateToTeam(t.teamNumber)}
+                      className={`p-3 rounded-xl cursor-pointer transition-all hover:scale-[1.02] shadow-sm flex flex-col justify-between gap-1.5 group border ${
+                        hasSubmitted
+                          ? 'bg-slate-900 border-emerald-600/60 hover:border-emerald-400 ring-1 ring-emerald-500/20'
+                          : 'bg-slate-950/50 border-slate-800 hover:border-slate-700 opacity-80 hover:opacity-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center ${
+                            hasSubmitted
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {t.teamNumber}
+                        </span>
+                        {hasSubmitted ? (
+                          <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-800/80">
+                            제출완료
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-medium text-slate-500">
+                            미제출
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors truncate">
+                          제 {t.teamNumber} 조
+                        </p>
+                        <p className="text-[10px] text-slate-400 truncate">
+                          {hasSubmitted ? t.teamName : '접속하여 등록'}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors truncate">
-                        제 {t.teamNumber} 조
-                      </p>
-                      <p className="text-[10px] text-slate-400 truncate">
-                        {t.teamName}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -760,6 +972,25 @@ export default function App() {
         hasNext={hasNext}
         hasPrev={hasPrev}
         isVotingOpen={sessionConfig.isVotingOpen}
+      />
+
+      {/* Firebase Realtime Connection & Session Management Modal */}
+      <FirebaseStatusModal
+        isOpen={isFirebaseModalOpen}
+        onClose={() => setIsFirebaseModalOpen(false)}
+        sessionId={sessionId}
+        onUpdateSessionId={(newId) => {
+          setSessionId(newId);
+          localStorage.setItem('semiconductor_active_session_id', newId);
+          setIsFirebaseModalOpen(false);
+        }}
+        submissionsCount={submissions.length}
+        teamsCount={teams.length}
+        datasetsCount={datasets.length}
+        isConnected={isFirebaseConnected}
+        onForceSync={() => {
+          testConnection().then((ok) => setIsFirebaseConnected(ok));
+        }}
       />
     </div>
   );

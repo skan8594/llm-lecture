@@ -5,39 +5,41 @@ import {
   Activity,
   Code2,
 } from 'lucide-react';
-import { CodeSubmission } from '../types';
+import { CodeSubmission, TeamActivity } from '../types';
 import { formatTeamName, getTeamNumber } from '../utils/teamUtils';
+import { isTeamSubmitted } from '../data/teamData';
 
 interface SubmissionAnalyticsBoardProps {
   submissions: CodeSubmission[];
   selectedTeam: string;
   onSelectTeam: (team: string) => void;
   totalTeams?: number;
+  teams?: TeamActivity[];
 }
 
 export const SubmissionAnalyticsBoard: React.FC<SubmissionAnalyticsBoardProps> = ({
   submissions,
   selectedTeam,
   onSelectTeam,
-  totalTeams,
+  totalTeams = 32,
+  teams = [],
 }) => {
   // Dynamic team count determination
-  const maxTeamNumInSubmissions = Math.max(
-    ...submissions.map((s) => getTeamNumber(s.team)),
-    0
-  );
-  const effectiveTotalTeams = totalTeams || Math.max(maxTeamNumInSubmissions, 15);
+  const effectiveTotalTeams = totalTeams || 32;
 
-  // Map each team to its submitted project (if any)
-  const teamSubmissionsMap: Record<number, CodeSubmission | undefined> = {};
+  // Map each team to its submitted project or registered team info
+  const teamSubmissionsMap: Record<number, { sub?: CodeSubmission; team?: TeamActivity; isSubmitted: boolean }> = {};
   for (let i = 1; i <= effectiveTotalTeams; i++) {
-    teamSubmissionsMap[i] = submissions.find((s) => {
+    const sub = submissions.find((s) => {
       const match = String(s.team).match(/\d+/);
       return match ? parseInt(match[0], 10) === i : false;
     });
+    const team = teams.find((t) => t.teamNumber === i);
+    const submitted = (team && isTeamSubmitted(team, submissions)) || !!sub;
+    teamSubmissionsMap[i] = { sub, team, isSubmitted: !!submitted };
   }
 
-  const submittedTeamsCount = Object.values(teamSubmissionsMap).filter(Boolean).length;
+  const submittedTeamsCount = Object.values(teamSubmissionsMap).filter((item) => item.isSubmitted).length;
   const pendingTeamsCount = Math.max(0, effectiveTotalTeams - submittedTeamsCount);
   const progressPercent = Math.min(100, Math.round((submittedTeamsCount / effectiveTotalTeams) * 100));
 
@@ -107,8 +109,10 @@ export const SubmissionAnalyticsBoard: React.FC<SubmissionAnalyticsBoardProps> =
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {Array.from({ length: effectiveTotalTeams }, (_, i) => i + 1).map((teamNum) => {
-              const sub = teamSubmissionsMap[teamNum];
-              const isSubmitted = !!sub;
+              const item = teamSubmissionsMap[teamNum];
+              const isSubmitted = item?.isSubmitted;
+              const sub = item?.sub;
+              const team = item?.team;
               const teamDisplayName = `제 ${teamNum} 조`;
               const isSelected = selectedTeam === `${teamNum}조` || selectedTeam === teamDisplayName;
 
@@ -128,11 +132,11 @@ export const SubmissionAnalyticsBoard: React.FC<SubmissionAnalyticsBoardProps> =
                     <span className="tracking-tight">{teamDisplayName}</span>
                     {isSubmitted ? (
                       <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                        완료
+                        취합 완료
                       </span>
                     ) : (
                       <span className="px-1.5 py-0.2 rounded text-[9px] font-medium bg-slate-800/60 text-slate-500 border border-slate-700/50">
-                        대기
+                        미제출
                       </span>
                     )}
                   </div>
@@ -145,11 +149,13 @@ export const SubmissionAnalyticsBoard: React.FC<SubmissionAnalyticsBoardProps> =
                             isSelected ? 'text-white' : 'text-emerald-300'
                           }`}
                         >
-                          {sub?.title}
+                          {sub?.title || team?.teamName || '과제 등록 완료'}
                         </div>
                         <div className="text-[9px] font-mono text-slate-400 mt-0.5 flex items-center justify-between">
-                          <span>{sub?.language}</span>
-                          <span className="font-bold text-amber-400">♥ {sub?.votes}</span>
+                          <span>{sub?.language || team?.language || 'WEB'}</span>
+                          <span className="font-bold text-amber-400">
+                            ♥ {sub?.votes || team?.totalTeamVotes || 0}
+                          </span>
                         </div>
                       </div>
                     ) : (

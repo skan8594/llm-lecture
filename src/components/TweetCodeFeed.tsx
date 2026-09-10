@@ -103,7 +103,7 @@ export const TweetCodeFeed: React.FC<TweetCodeFeedProps> = ({
             className="bg-slate-950 text-slate-300 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-indigo-500"
           >
             <option value="ALL">전체 팀</option>
-            {Array.from({ length: Math.max(15, ...submissions.map((s) => getTeamNumber(s.team))) }, (_, i) => i + 1).map((num) => (
+            {Array.from({ length: Math.max(32, ...submissions.map((s) => getTeamNumber(s.team))) }, (_, i) => i + 1).map((num) => (
               <option key={num} value={String(num)}>
                 제 {num} 조
               </option>

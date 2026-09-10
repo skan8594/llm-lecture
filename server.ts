@@ -20,7 +20,7 @@ app.use(express.json({ limit: '25mb' }));
 
 // In-memory state for training session
 let sessionConfig: TrainingSessionConfig = {
-  totalTargetTeams: 15,
+  totalTargetTeams: 32,
   trainingTitle: '반도체 제조 혁신 LLM 생산성 극대화 발표회',
   instructorName: '반도체 AI 디렉터',
   isVotingOpen: true,

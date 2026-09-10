@@ -21,10 +21,12 @@ import {
   X,
   Flame,
   Volume2,
+  ExternalLink,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { TeamActivity, ProductivityCategory, CodeSubmission } from '../types';
 import { CodeRunner } from './CodeRunner';
+import { isTeamSubmitted } from '../data/teamData';
 
 interface TeamPresentationStageProps {
   teams: TeamActivity[];
@@ -80,26 +82,28 @@ export const TeamPresentationStage: React.FC<TeamPresentationStageProps> = ({
       s.team === currentTeam.teamName
   );
 
+  const hasTeamSubmitted = isTeamSubmitted(currentTeam, submissions);
+
   const teamProblem =
     currentTeam.problemStatement ||
     repSubmission?.description ||
-    '단순 반복 수작업으로 인한 업무 비효율 및 시간 지연 문제를 해결하고자 함';
+    (hasTeamSubmitted ? '등록된 과제 내용' : '아직 팀 정보 및 과제 기획안이 제출되지 않았습니다.');
 
   const teamPrompt =
     currentTeam.llmPromptStrategy ||
     repSubmission?.promptUsed ||
-    '지정된 데이터와 비즈니스 요구사항을 기반으로 오류 없이 즉각 산출하는 LLM 프롬프트 설계';
+    (hasTeamSubmitted ? '등록된 프롬프트 전략' : '');
 
   const teamCode =
     currentTeam.code ||
     repSubmission?.code ||
-    `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:20px;background:#0f172a;color:#fff;"><h3>${currentTeam.teamName}</h3><p>라이브 시연 준비 완료</p><button onclick="alert('성공적으로 실행되었습니다!')" style="background:#3b82f6;color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;">실행 테스트</button></body></html>`;
+    '';
 
   const teamLanguage = (currentTeam.language || repSubmission?.language || 'html') as any;
   const teamImpact =
     currentTeam.productivityImpact ||
     repSubmission?.productivityImpact ||
-    '주당 반복 업무 5시간 이상 절감';
+    (hasTeamSubmitted ? '효과 분석' : '제출 대기 중');
 
   // Timer: 3 min (180s) or 5 min (300s)
   const [timerDuration, setTimerDuration] = useState<number>(180);
@@ -287,12 +291,13 @@ export const TeamPresentationStage: React.FC<TeamPresentationStageProps> = ({
           </div>
         </div>
 
-        {/* 15 Teams Horizontal Navigation Ribbon */}
+        {/* Horizontal Navigation Ribbon */}
         <div className="max-w-7xl mx-auto flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
           {teams.map((t, idx) => {
             const isSelected = idx === currentIndex;
             const isCompleted = t.presentationStatus === 'completed';
             const isPresenting = t.presentationStatus === 'presenting';
+            const hasSub = isTeamSubmitted(t, submissions);
 
             return (
               <button
@@ -305,9 +310,12 @@ export const TeamPresentationStage: React.FC<TeamPresentationStageProps> = ({
                     ? 'bg-amber-950/80 border-amber-500 text-amber-300'
                     : isCompleted
                     ? 'bg-slate-900/90 border-slate-700 text-slate-300 hover:border-slate-500'
-                    : 'bg-slate-950/50 border-slate-800 text-slate-500 hover:text-slate-300'
+                    : hasSub
+                    ? 'bg-slate-900/80 border-emerald-800/60 text-slate-200 hover:border-emerald-600'
+                    : 'bg-slate-950/50 border-slate-850 text-slate-500 hover:text-slate-300 opacity-70'
                 }`}
               >
+                {hasSub && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="취합 완료" />}
                 <span>{t.teamNumber}조</span>
                 {isPresenting && (
                   <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping inline-block" />
@@ -649,7 +657,29 @@ export const TeamPresentationStage: React.FC<TeamPresentationStageProps> = ({
 
             {/* Stage Sandbox Container */}
             <div className="flex-1 min-h-[500px] bg-slate-950 border border-slate-800 rounded-b-2xl overflow-hidden shadow-2xl relative">
-              {viewMode === 'runner' ? (
+              {!teamCode ? (
+                <div className="flex flex-col items-center justify-center h-full min-h-[500px] p-8 text-center bg-slate-950/60">
+                  <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-800 text-amber-400 flex items-center justify-center mb-4 shadow-lg">
+                    <Clock className="w-7 h-7" />
+                  </div>
+                  <h4 className="text-base font-bold text-white">
+                    제 {currentTeam.teamNumber}조 코드가 아직 제출되지 않았습니다
+                  </h4>
+                  <p className="text-xs text-slate-400 max-w-md mt-2 leading-relaxed">
+                    해당 조 교육생이 전용 워크스페이스에서 AI 프롬프트 생성 코드를 작성하고 제출하면,
+                    이곳 라이브 시연 무대에 실시간으로 반영되어 즉시 실행할 수 있습니다.
+                  </p>
+                  <a
+                    href={`?team=${currentTeam.teamNumber}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-5 inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-all shadow-md"
+                  >
+                    <span>제 {currentTeam.teamNumber}조 워크스페이스 열기</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              ) : viewMode === 'runner' ? (
                 <div className="w-full h-full min-h-[500px]">
                   <CodeRunner
                     code={teamCode}

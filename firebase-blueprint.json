@@ -1,0 +1,86 @@
+{
+  "entities": {
+    "Session": {
+      "title": "Session",
+      "description": "The onboarding session metadata and configuration for 2026onboarding",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "trainingTitle": { "type": "string" },
+        "instructorName": { "type": "string" },
+        "totalTargetTeams": { "type": "number" },
+        "isVotingOpen": { "type": "boolean" },
+        "submissionDeadlineMinutes": { "type": "number" },
+        "sessionStartTime": { "type": "number" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["sessionId", "trainingTitle"]
+    },
+    "CodeSubmission": {
+      "title": "CodeSubmission",
+      "description": "Code submission from participant teams",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "team": { "type": "string" },
+        "title": { "type": "string" },
+        "promptUsed": { "type": "string" },
+        "language": { "type": "string" },
+        "code": { "type": "string" },
+        "productivityImpact": { "type": "string" },
+        "votes": { "type": "number" },
+        "authorName": { "type": "string" },
+        "category": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "team", "title", "code"]
+    },
+    "TeamActivity": {
+      "title": "TeamActivity",
+      "description": "Team status, presentation state, and peer feedback",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "teamNumber": { "type": "number" },
+        "teamName": { "type": "string" },
+        "slogan": { "type": "string" },
+        "presentationStatus": { "type": "string" },
+        "presentationMinutes": { "type": "number" },
+        "totalTeamVotes": { "type": "number" },
+        "peerScore": { "type": "number" }
+      },
+      "required": ["id", "teamNumber", "teamName"]
+    },
+    "SampleDataset": {
+      "title": "SampleDataset",
+      "description": "Semiconductor datasets uploaded or provided for the session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "fileType": { "type": "string" },
+        "csvContent": { "type": "string" }
+      },
+      "required": ["id", "title"]
+    }
+  },
+  "firestore": {
+    "/sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/Session" },
+      "description": "Onboarding session configuration such as 2026onboarding"
+    },
+    "/sessions/{sessionId}/submissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/CodeSubmission" },
+      "description": "Code submissions submitted by teams for the session"
+    },
+    "/sessions/{sessionId}/teams/{teamId}": {
+      "schema": { "$ref": "#/entities/TeamActivity" },
+      "description": "Team presentation and activity status"
+    },
+    "/sessions/{sessionId}/datasets/{datasetId}": {
+      "schema": { "$ref": "#/entities/SampleDataset" },
+      "description": "Datasets available for participants in the session"
+    }
+  }
+}

@@ -15,6 +15,7 @@ import {
   Sparkles,
   FileSpreadsheet,
   BarChart3,
+  Database,
 } from 'lucide-react';
 import { CodeSubmission, TeamActivity, SampleDataset } from '../types';
 import { LeaderboardPodium } from './LeaderboardPodium';
@@ -25,6 +26,7 @@ import { TweetCodeFeed } from './TweetCodeFeed';
 import { DatasetManager } from './DatasetManager';
 import { SampleWaferDashboard } from './SampleWaferDashboard';
 import { formatTeamName, getTeamNumber } from '../utils/teamUtils';
+import { isTeamSubmitted } from '../data/teamData';
 
 interface PresenterDashboardProps {
   teams: TeamActivity[];
@@ -43,6 +45,9 @@ interface PresenterDashboardProps {
   onStartTeamPresentation: (teamIndex: number) => void;
   onExportJson?: () => void;
   onImportJson?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  firebaseConnected?: boolean;
+  sessionId?: string;
+  onOpenFirebaseModal?: () => void;
 }
 
 export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
@@ -62,20 +67,28 @@ export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
   onStartTeamPresentation,
   onExportJson,
   onImportJson,
+  firebaseConnected = true,
+  sessionId = '2026onboarding',
+  onOpenFirebaseModal,
 }) => {
   // Dynamic team count
   const maxTeamNumInSubmissions = Math.max(
     ...submissions.map((s) => getTeamNumber(s.team)),
     0
   );
-  const totalTeams = Math.max(teams.length, maxTeamNumInSubmissions, 1);
+  const totalTeams = Math.max(teams.length, maxTeamNumInSubmissions, 32);
 
-  // Teams submission count
+  // Teams submission status map (based on actual submissions and registered team info)
   const teamSubmissionMap: Record<number, boolean> = {};
   submissions.forEach((s) => {
     const num = getTeamNumber(s.team);
     if (num >= 1) {
       teamSubmissionMap[num] = true;
+    }
+  });
+  teams.forEach((t) => {
+    if (isTeamSubmitted(t, submissions)) {
+      teamSubmissionMap[t.teamNumber] = true;
     }
   });
 
@@ -130,6 +143,19 @@ export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
               <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                 강사용
               </span>
+              {onOpenFirebaseModal && (
+                <button
+                  onClick={onOpenFirebaseModal}
+                  className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition-all hover:scale-102"
+                  title="Firebase 2026onboarding 실시간 동기화 상세 보기"
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span className="font-mono">Firebase: {sessionId}</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -199,12 +225,12 @@ export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
           {/* Metric 1 */}
           <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl">
             <div className="flex items-center justify-between text-[11px] text-slate-400 font-bold">
-              <span>제출 현황</span>
+              <span>취합 현황 (제출 기준)</span>
               <Users className="w-3.5 h-3.5 text-indigo-400" />
             </div>
             <div className="mt-1 flex items-baseline gap-1.5 font-mono">
               <span className="text-2xl font-black text-white">{submittedTeamsCount}</span>
-              <span className="text-xs text-slate-400">/ {totalTeams}팀</span>
+              <span className="text-xs text-slate-400">/ 최대 {totalTeams}팀</span>
               <span className="ml-auto text-xs font-black text-emerald-400">{submissionRate}%</span>
             </div>
             <div className="mt-2 w-full bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-800">
@@ -212,6 +238,10 @@ export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
                 className="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full rounded-full transition-all duration-500"
                 style={{ width: `${submissionRate}%` }}
               />
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
+              <span>취합 완료 {submittedTeamsCount}팀</span>
+              <span>대기 {pendingTeamsCount}팀</span>
             </div>
           </div>
 
@@ -401,6 +431,7 @@ export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
             selectedTeam={selectedTeam}
             onSelectTeam={(team) => setSelectedTeam(team)}
             totalTeams={totalTeams}
+            teams={teams}
           />
         )}
 
