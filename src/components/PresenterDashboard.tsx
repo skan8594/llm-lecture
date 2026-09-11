@@ -16,6 +16,7 @@ import {
   FileSpreadsheet,
   BarChart3,
   Database,
+  BookOpen,
 } from 'lucide-react';
 import { CodeSubmission, TeamActivity, SampleDataset } from '../types';
 import { LeaderboardPodium } from './LeaderboardPodium';
@@ -25,6 +26,7 @@ import { TeamActivitiesGrid } from './TeamActivitiesGrid';
 import { TweetCodeFeed } from './TweetCodeFeed';
 import { DatasetManager } from './DatasetManager';
 import { SampleWaferDashboard } from './SampleWaferDashboard';
+import { CurriculumManager } from './CurriculumManager';
 import { formatTeamName, getTeamNumber } from '../utils/teamUtils';
 import { isTeamSubmitted } from '../data/teamData';
 
@@ -97,8 +99,8 @@ export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
   const submissionRate = Math.min(100, Math.round((submittedTeamsCount / totalTeams) * 100));
   const totalVotes = submissions.reduce((acc, s) => acc + s.votes, 0);
 
-  // Tabbed view: 'feed' (Tweet style), 'teams', 'analytics', 'leaderboard', 'datasets', 'sample_dashboard'
-  const [activeTab, setActiveTab] = useState<'feed' | 'teams' | 'analytics' | 'leaderboard' | 'datasets' | 'sample_dashboard'>('feed');
+  // Tabbed view: 'feed' (Tweet style), 'teams', 'analytics', 'leaderboard', 'datasets', 'sample_dashboard', 'curriculum'
+  const [activeTab, setActiveTab] = useState<'feed' | 'teams' | 'analytics' | 'leaderboard' | 'datasets' | 'sample_dashboard' | 'curriculum'>('feed');
 
   // Selected team for filter in analytics
   const [selectedTeam, setSelectedTeam] = useState<string>('ALL');
@@ -201,6 +203,20 @@ export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
             >
               <Tv className="w-3.5 h-3.5 fill-current" />
               <span>발표 무대</span>
+            </button>
+
+            {/* Curriculum Quick Shortcut */}
+            <button
+              onClick={() => setActiveTab('curriculum')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'curriculum'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-indigo-500/30'
+              }`}
+              title="교육 커리큘럼 및 강의안 파일 보기"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">커리큘럼 & 강의안</span>
             </button>
 
             {/* Data Export Button */}
@@ -379,6 +395,19 @@ export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
                 Live
               </span>
             </button>
+
+            {/* Tab 7: Curriculum & Lecture Materials */}
+            <button
+              onClick={() => setActiveTab('curriculum')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'curriculum'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                  : 'text-slate-400 hover:text-white bg-slate-950/60 border border-slate-800'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
+              <span>📚 교육 커리큘럼 & 강의안</span>
+            </button>
           </div>
 
           {/* Quick Present Button */}
@@ -465,6 +494,11 @@ export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
               isEmbedded={true}
             />
           </div>
+        )}
+
+        {/* ================= TAB 7: CURRICULUM & LECTURE MATERIALS ================= */}
+        {activeTab === 'curriculum' && (
+          <CurriculumManager />
         )}
       </main>
     </div>

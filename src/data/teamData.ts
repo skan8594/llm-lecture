@@ -4,9 +4,8 @@ export function createDefaultTeam(teamNumber: number): TeamActivity {
   return {
     id: `team-${teamNumber}`,
     teamNumber,
-    teamName: `제 ${teamNumber} 조`,
+    teamName: '',
     slogan: '',
-    // 카테고리는 임의로 분배하지 않음: 접속하여 팀 정보를 직접 입력한 경우에만 설정됨
     category: undefined,
     isRegistered: false,
     presentationMinutes: 3,
@@ -24,21 +23,34 @@ export function createDefaultTeam(teamNumber: number): TeamActivity {
 }
 
 /**
- * 팀이 실제로 접속하여 팀 정보(기획안)나 코드를 제출했는지 판별
+ * 팀이 실제로 접속하여 팀 정보(기획안)를 등록했거나 코드를 제출했는지 엄격하게 판별
  */
 export function isTeamSubmitted(team: TeamActivity, submissions?: CodeSubmission[]): boolean {
-  if (team.isRegistered) return true;
-  if (team.slogan && team.slogan.trim().length > 0) return true;
-  if (team.problemStatement && team.problemStatement.trim().length > 0) return true;
-  if (team.code && team.code.trim().length > 0) return true;
-  if (team.category) return true;
-  if (team.representativeSubmissionId) return true;
+  if (!team) return false;
+
+  // 1. 실제 코드 제출물이 존재하는 경우
   if (submissions && submissions.some((s) => {
     const match = String(s.team).match(/\d+/);
     return match ? parseInt(match[0], 10) === team.teamNumber : false;
   })) {
     return true;
   }
+
+  // 2. 대표 제출물 ID가 연결된 경우
+  if (team.representativeSubmissionId && team.representativeSubmissionId.trim().length > 0) {
+    return true;
+  }
+
+  // 3. 사용자가 직접 접속하여 등록(isRegistered)을 완료하고 실질적인 팀 정보나 코드를 작성한 경우
+  if (team.isRegistered) {
+    if (team.teamName && team.teamName.trim().length > 0 && team.teamName !== `제 ${team.teamNumber} 조` && team.teamName !== `제 ${team.teamNumber}조`) {
+      return true;
+    }
+    if (team.slogan && team.slogan.trim().length > 0) return true;
+    if (team.problemStatement && team.problemStatement.trim().length > 0) return true;
+    if (team.code && team.code.trim().length > 0) return true;
+  }
+
   return false;
 }
 

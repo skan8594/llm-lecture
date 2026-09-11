@@ -189,6 +189,16 @@ export function subscribeToSessionConfig(
   );
 }
 
+function cleanForFirestore<T extends Record<string, any>>(obj: T): any {
+  const res: any = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) {
+      res[k] = v;
+    }
+  }
+  return res;
+}
+
 // Writers
 export async function saveSubmissionToFirebase(
   sessionId: string = DEFAULT_SESSION_ID,
@@ -196,7 +206,7 @@ export async function saveSubmissionToFirebase(
 ) {
   const path = `sessions/${sessionId}/submissions`;
   try {
-    await setDoc(doc(db, path, submission.id), submission, { merge: true });
+    await setDoc(doc(db, path, submission.id), cleanForFirestore(submission), { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${path}/${submission.id}`);
     throw error;
@@ -209,7 +219,7 @@ export async function updateTeamInFirebase(
 ) {
   const path = `sessions/${sessionId}/teams`;
   try {
-    await setDoc(doc(db, path, team.id), team, { merge: true });
+    await setDoc(doc(db, path, team.id), cleanForFirestore(team), { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${path}/${team.id}`);
     throw error;

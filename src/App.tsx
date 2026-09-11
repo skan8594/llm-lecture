@@ -36,10 +36,20 @@ import { FirebaseStatusModal } from './components/FirebaseStatusModal';
 // #team0 -> Presenter
 // #team1, #team2, ... -> Participant
 function parseTeamFromLocation(): number | null {
-  if (typeof window === 'undefined') return 0;
+  if (typeof window === 'undefined') return null;
 
-  // 1. Query parameter ?team=...
+  // 1. Instructor secret query params: ?admin=true or ?instructor=true or ?role=instructor
   const params = new URLSearchParams(window.location.search);
+  if (
+    params.get('admin') === 'true' ||
+    params.get('instructor') === 'true' ||
+    params.get('role') === 'instructor' ||
+    params.get('role') === 'admin'
+  ) {
+    return 0; // Instructor Dashboard
+  }
+
+  // 2. Query parameter ?team=... (e.g. ?team=0 for instructor, ?team=1..32 for teams)
   const teamParam = params.get('team');
   if (teamParam !== null) {
     const clean = teamParam.toLowerCase().replace('team', '').replace('조', '');
@@ -47,17 +57,21 @@ function parseTeamFromLocation(): number | null {
     if (!isNaN(num) && num >= 0) return num;
   }
 
-  // 2. Pathname /team0 ... /team99
-  const pathMatch = window.location.pathname.match(/\/team(\d+)(?:\/|$)/i);
-  if (pathMatch) {
-    const num = parseInt(pathMatch[1], 10);
+  // 3. Hash secret/routing: #admin, #instructor, #team0, #team1..
+  const hash = window.location.hash.toLowerCase();
+  if (hash.includes('#admin') || hash.includes('#instructor')) {
+    return 0;
+  }
+  const hashMatch = hash.match(/#team(\d+)(?:\/|$)/i);
+  if (hashMatch) {
+    const num = parseInt(hashMatch[1], 10);
     if (!isNaN(num) && num >= 0) return num;
   }
 
-  // 3. Hash #team0 ... #team99
-  const hashMatch = window.location.hash.match(/#team(\d+)(?:\/|$)/i);
-  if (hashMatch) {
-    const num = parseInt(hashMatch[1], 10);
+  // 4. Pathname /team0 ... /team99
+  const pathMatch = window.location.pathname.match(/\/team(\d+)(?:\/|$)/i);
+  if (pathMatch) {
+    const num = parseInt(pathMatch[1], 10);
     if (!isNaN(num) && num >= 0) return num;
   }
 
@@ -103,11 +117,20 @@ export default function App() {
     return INITIAL_SUBMISSIONS;
   });
 
-  // Normalization helper: ensures unsubmitted teams have no arbitrary category
+  // Normalization helper: ensures unsubmitted teams have no arbitrary category or dummy values
   const sanitizeTeam = (t: TeamActivity, subs: CodeSubmission[]): TeamActivity => {
     const hasSub = isTeamSubmitted(t, subs);
     if (!hasSub) {
-      return { ...t, category: undefined, isRegistered: false };
+      return {
+        ...t,
+        category: undefined,
+        isRegistered: false,
+        teamName: '',
+        slogan: '',
+        problemStatement: '',
+        productivityImpact: '',
+        code: '',
+      };
     }
     return { ...t, isRegistered: true };
   };
@@ -121,7 +144,18 @@ export default function App() {
         if (Array.isArray(parsed) && parsed.length > 0) {
           const cleaned = parsed.map((t: TeamActivity) => {
             const hasSub = isTeamSubmitted(t);
-            return hasSub ? { ...t, isRegistered: true } : { ...t, category: undefined, isRegistered: false };
+            return hasSub
+              ? { ...t, isRegistered: true }
+              : {
+                  ...t,
+                  category: undefined,
+                  isRegistered: false,
+                  teamName: '',
+                  slogan: '',
+                  problemStatement: '',
+                  productivityImpact: '',
+                  code: '',
+                };
           });
           if (cleaned.length < 32) {
             const existingNumbers = new Set(cleaned.map((t: TeamActivity) => t.teamNumber));
@@ -843,38 +877,8 @@ export default function App() {
                 반도체 제조 혁신 LLM 생산성 해커톤
               </h1>
               <p className="text-xs sm:text-sm text-slate-400 max-w-lg mx-auto">
-                접속하실 조(팀) 또는 강사용 종합 대시보드를 선택해주세요.
-                선택 시 해당 전용 URL로 연결됩니다.
+                접속하실 소속 조(팀)를 선택하여 워크스페이스에 입장해주세요.
               </p>
-            </div>
-
-            {/* Instructor Entry Card */}
-            <div
-              onClick={() => navigateToTeam(0)}
-              className="p-4 sm:p-5 rounded-2xl bg-indigo-950/40 hover:bg-indigo-950/70 border border-indigo-700/60 hover:border-indigo-500 cursor-pointer transition-all shadow-xl flex items-center justify-between group"
-            >
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-600/40">
-                  <Laptop className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-white group-hover:text-indigo-300 transition-colors">
-                      강사용 종합 대시보드
-                    </h3>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
-                      team0
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400">
-                    전체 팀 실시간 현황, 랭킹, 발표 모드, 투표 제어
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-400 group-hover:translate-x-1 transition-transform">
-                <span>입장하기</span>
-                <ArrowRight className="w-4 h-4" />
-              </div>
             </div>
 
             {/* Teams Selection Grid */}
@@ -931,7 +935,7 @@ export default function App() {
                           제 {t.teamNumber} 조
                         </p>
                         <p className="text-[10px] text-slate-400 truncate">
-                          {hasSubmitted ? t.teamName : '접속하여 등록'}
+                          {hasSubmitted ? (t.teamName || '과제 제출완료') : '미등록 (클릭하여 입장)'}
                         </p>
                       </div>
                     </div>

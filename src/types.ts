@@ -118,3 +118,36 @@ export interface SampleDataset {
   uploadedAt: number;         // 업로드 시각
   uploadedBy?: string;        // 등록자 (예: 강사)
 }
+
+export type CurriculumCategory = 'orientation' | 'theory' | 'prompting' | 'eda' | 'hackathon' | 'mentoring' | 'pitching' | 'award';
+
+export interface CurriculumSession {
+  id: string;
+  title: string;                // 모듈 명칭 (순서 번호 없이 자유 편집 가능)
+  durationMinutes: number;      // 소요 시간 (분 단위, 예: 30)
+  category: CurriculumCategory;
+  summary: string;              // 핵심 개요
+  objectives: string[];         // 학습 목표
+  handsOnTasks: string[];       // 실습 과제 및 액션 아이템
+  recommendedPrompts?: string[];// 추천 프롬프트 템플릿
+  instructorNotes?: string;     // 강사 전용 팁 & 진행 가이드
+  isCompleted?: boolean;        // 완료 여부 체크
+  timeRange?: string;           // 선택적 고정 시간대 (비워둘 수 있음)
+  sessionNumber?: number;       // 선택적 순서 번호
+}
+
+export interface LectureMaterial {
+  id: string;
+  title: string;                // 자료 제목 (예: 반도체 제조혁신 LLM 해커톤 강의교안)
+  fileName: string;             // 원본 파일명 (예: 2026_semiconductor_llm_lecture.pdf)
+  fileType: 'pdf' | 'pptx' | 'docx' | 'image' | 'markdown' | 'link' | 'other';
+  fileSize: string;             // 파일 크기 (예: "15.4 MB")
+  uploadedAt: number;           // 업로드 시각
+  uploadedBy: string;           // 등록자 (예: 강사)
+  fileDataUrl?: string;         // Base64 Data URL or Blob URL
+  textContent?: string;         // 텍스트/마크다운 원문 내용
+  externalUrl?: string;         // 외부 링크 (Google Slides, Notion 등)
+  description?: string;         // 자료 설명
+  isSharedWithStudents: boolean;// 교육생 열람 가능 여부
+  slideCount?: number;          // 슬라이드 장수
+}

@@ -27,11 +27,13 @@ import {
   ArrowRight,
   FileSpreadsheet,
   BarChart3,
+  BookOpen,
 } from 'lucide-react';
 import { TeamActivity, CodeSubmission, ProductivityCategory, CodeLanguage, TeamAsset, SampleDataset } from '../types';
 import { CodeRunner } from './CodeRunner';
 import { ParticipantDatasetList } from './ParticipantDatasetList';
 import { SampleWaferDashboard } from './SampleWaferDashboard';
+import { CurriculumManager } from './CurriculumManager';
 import { formatTeamName, formatTeamHandle } from '../utils/teamUtils';
 
 interface ParticipantTeamViewProps {
@@ -74,11 +76,11 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
   sessionId = '2026onboarding',
   onOpenFirebaseModal,
 }) => {
-  // Navigation Tabs: 'info' | 'code' | 'assets' | 'datasets' | 'dashboard' | 'voting'
-  const [activeTab, setActiveTab] = useState<'info' | 'code' | 'assets' | 'datasets' | 'dashboard' | 'voting'>('info');
+  // Navigation Tabs: 'info' | 'code' | 'assets' | 'datasets' | 'dashboard' | 'voting' | 'curriculum'
+  const [activeTab, setActiveTab] = useState<'info' | 'code' | 'assets' | 'datasets' | 'dashboard' | 'voting' | 'curriculum'>('info');
 
   // ==================== TAB 1: TEAM INFO STATE ====================
-  const [teamName, setTeamName] = useState(team.teamName || `제 ${teamNumber} 조`);
+  const [teamName, setTeamName] = useState(team.teamName || '');
   const [slogan, setSlogan] = useState(team.slogan || '');
   const [category, setCategory] = useState<ProductivityCategory>(team.category || 'yield_defect');
   const [problemStatement, setProblemStatement] = useState(team.problemStatement || '');
@@ -101,12 +103,14 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
 
   const handleSaveTeamInfo = (e: React.FormEvent) => {
     e.preventDefault();
+    const finalTeamName = teamName.trim();
     const updatedFields: Partial<TeamActivity> = {
-      teamName: teamName.trim() || `제 ${teamNumber} 조`,
+      teamName: finalTeamName,
       slogan: slogan.trim(),
       category,
       problemStatement: problemStatement.trim(),
       productivityImpact: productivityImpact.trim(),
+      isRegistered: !!(finalTeamName || slogan.trim() || problemStatement.trim()),
     };
 
     if (onUpdateTeamInfo) {
@@ -504,6 +508,19 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
               {submissions.length}
             </span>
           </button>
+
+          {/* Sub-tab 7: Curriculum & Lecture Materials (Trainee View) */}
+          <button
+            onClick={() => setActiveTab('curriculum')}
+            className={`pb-2.5 px-3 text-xs sm:text-sm font-bold flex items-center gap-1.5 border-b-2 whitespace-nowrap transition-colors ${
+              activeTab === 'curriculum'
+                ? 'border-indigo-500 text-indigo-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
+            <span>7. 교육 커리큘럼 & 강의안</span>
+          </button>
         </div>
       </header>
 
@@ -546,7 +563,6 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    required
                     value={teamName}
                     onChange={(e) => setTeamName(e.target.value)}
                     placeholder="예: 제 1 조 · 식각 공정 수율 혁신팀"
@@ -1263,6 +1279,13 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
             onNavigateToSubmit={() => setActiveTab('code')}
             isEmbedded={true}
           />
+        )}
+
+        {/* ================================================================= */}
+        {/* TAB 7: CURRICULUM & LECTURE MATERIALS (STUDENT READ-ONLY VIEW)    */}
+        {/* ================================================================= */}
+        {activeTab === 'curriculum' && (
+          <CurriculumManager readOnly={true} />
         )}
       </main>
 
