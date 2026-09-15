@@ -2,137 +2,310 @@ import { CurriculumSession, LectureMaterial } from '../types';
 
 export const DEFAULT_CURRICULUM_SESSIONS: CurriculumSession[] = [
   {
-    id: 'session-orientation',
-    durationMinutes: 20,
-    title: '오리엔테이션 & 생성형 AI 기반 반도체 제조 혁신',
-    category: 'orientation',
-    summary: '반도체 8대 공정의 복잡도 증가와 엔지니어 업무 생산성 혁신을 위한 최신 LLM(Claude/GPT/Gemini) 활용 트렌드 및 워크숍 진행 룰 소개',
-    objectives: [
-      '반도체 제조(FAB) 분야에서 생성형 AI 도입의 실효성과 글로벌 선진사 적용 사례 이해',
-      '수율 분석, 계측, FDC 센서 이상 감지 등 핵심 업무 병목(Pain Points) 파악',
-      '팀별 워크스페이스 접속, 실습 플랫폼 인터페이스 및 평가 기준 숙지',
+    "id": "mobile-1",
+    "durationMinutes": 15,
+    "title": "접속·첫 프롬프트",
+    "category": "prompting",
+    "summary": "휴대폰으로 예시를 복사하고 AI 답변을 원문과 대조합니다.",
+    "objectives": [
+      "접속·첫 프롬프트"
     ],
-    handsOnTasks: [
-      '각 조별 워크스페이스 입장 (URL: ?team=1 ~ 32)',
-      '팀명 및 슬로건, 팀원 역할(발표/프롬프트/코드) 등록',
-      '제공되는 8종 FAB 샘플 데이터셋 구조 확인',
+    "handsOnTasks": [
+      "예시를 AI 앱에 붙여넣기",
+      "원문과 비교하여 누락·추측·계산 오류 수정",
+      "검증된 결과와 사용한 프롬프트 제출"
     ],
-    recommendedPrompts: [
-      '당신은 반도체 수율 분석 15년 차 시니어 엔지니어입니다. 300mm 웨이퍼 전면 결함 맵 데이터에서 CMP 스크래치와 포토 공정 브릿지 결함을 분류하기 위한 핵심 데이터 피처 5가지를 도출하고 설명해주세요.',
+    "recommendedPrompts": [
+      "샘플 메모: ETCH-A 14시 점검 예정, 담당자 확인 필요. 사실과 확인할 사항을 구분해줘."
     ],
-    instructorNotes: '참가자 전원이 소속 조 워크스페이스에 접속했는지 현황판에서 확인하고, 접속 안내를 지원합니다.',
-    isCompleted: false,
+    "instructorNotes": "15분 진행. 샘플 데이터만 사용하며 결과를 원문과 대조합니다.",
+    "isCompleted": false
   },
   {
-    id: 'session-prompting',
-    durationMinutes: 30,
-    title: '반도체 엔지니어를 위한 고급 프롬프트 엔지니어링',
-    category: 'prompting',
-    summary: '단순 질의응답을 넘어 엔지니어링 수준의 정밀한 결과물(파이썬 스크립트, SQL 쿼리, 웹 대시보드)을 뽑아내는 실전 프롬프트 패턴 실습',
-    objectives: [
-      'Role-Persona, Context, Task, Constraint, Output Schema 5단계 프롬프트 설계법 마스터',
-      'Few-Shot 예시와 Chain-of-Thought(생각의 사슬)를 활용한 반도체 불량 원인 추론 정확도 향상',
-      '정형 데이터(CSV/JSON) 자동 파싱 및 시각화 코드 직접 생성 기법 습득',
+    "id": "mobile-2",
+    "durationMinutes": 25,
+    "title": "인수인계 요약",
+    "category": "prompting",
+    "summary": "휴대폰으로 예시를 복사하고 AI 답변을 원문과 대조합니다.",
+    "objectives": [
+      "인수인계 요약"
     ],
-    handsOnTasks: [
-      '반도체 결함 분류 및 FDC 센서 알람 필터링 프롬프트 작성',
-      '프롬프트 실행 결과를 플랫폼 내 코드 샌드박스에서 즉시 디버깅 & 테스트',
-      '1차 개별 코드 제출(Code Tweet) 피드에 등록해보기',
+    "handsOnTasks": [
+      "예시를 AI 앱에 붙여넣기",
+      "원문과 비교하여 누락·추측·계산 오류 수정",
+      "검증된 결과와 사용한 프롬프트 제출"
     ],
-    recommendedPrompts: [
-      '다음 입력 CSV 로그는 식각 챔버의 RF Source/Bias Power, Pressure(mTorr), ESC Temperature 센서 시계열입니다. 진공 압력이 15mTorr 이상으로 급증하고 Bias Power가 270W를 초과하는 이상 헌팅 구간을 탐지하여 타임스탬프와 알람 등급(WARNING/CRITICAL)을 JSON으로 반환하는 파이썬 코드를 작성하세요.',
+    "recommendedPrompts": [
+      "기록: 09:10 압력 알람, 09:15 담당자 전달, 원인 미확인, 10:00 재확인 예정. 상태·조치·다음 확인으로 요약해줘. 없는 사실을 추가하지 마."
     ],
-    instructorNotes: '프롬프트에 제약조건(예: 외부 라이브러리 없이 실행 가능한 순수 HTML/JS or Python 표준 모듈)을 명시하는 법을 강조해주세요.',
-    isCompleted: false,
+    "instructorNotes": "25분 진행. 샘플 데이터만 사용하며 결과를 원문과 대조합니다.",
+    "isCompleted": false
   },
   {
-    id: 'session-eda',
-    durationMinutes: 35,
-    title: 'FAB 공정/수율 데이터셋 EDA & 이상감지 자동화',
-    category: 'eda',
-    summary: '플랫폼에 탑재된 8대 반도체 실무 데이터셋(웨이퍼 결함맵, 노광 오버레이, 식각 FDC, EDS 빈맵 등)을 활용한 EDA 및 시각화 파이프라인 구축',
-    objectives: [
-      '공정 도메인별 6대 생산성 카테고리(수율, 공정최적화, 설비FDC, 계측QA, 물류Q-Time, 안전) 분석',
-      'CSV 데이터를 기반으로 대화형 차트(웨이퍼 맵 히트맵, 산점도, 공정 트렌드 차트) 자동 생성',
-      '기존 수작업 엑셀 분석 대비 80% 이상의 시간 단축 성과 지표 산출',
+    "id": "mobile-3",
+    "durationMinutes": 30,
+    "title": "계측 표의 이상 항목 찾기",
+    "category": "prompting",
+    "summary": "휴대폰으로 예시를 복사하고 AI 답변을 원문과 대조합니다.",
+    "objectives": [
+      "계측 표의 이상 항목 찾기"
     ],
-    handsOnTasks: [
-      '제공된 샘플 데이터셋 중 1~2개 선택하여 데이터 전처리 프롬프트 작성',
-      '웨이퍼 결함 분포 또는 오버레이 오차 벡터를 시각화하는 인터랙티브 대시보드 컴포넌트 구현',
-      '데이터셋 매니저에서 추가 필요 컬럼이나 커스텀 CSV 데이터 업로드 실습',
+    "handsOnTasks": [
+      "예시를 AI 앱에 붙여넣기",
+      "원문과 비교하여 누락·추측·계산 오류 수정",
+      "검증된 결과와 사용한 프롬프트 제출"
     ],
-    recommendedPrompts: [
-      '첨부된 300mm 웨이퍼 결함 좌표(die_x, die_y, pos_x_mm, pos_y_mm, defect_class)를 활용해, HTML5 Canvas로 300mm 원형 웨이퍼 외곽선과 다이 그리드를 그리고 결함 클래스(Scratch=Red, Bridge=Orange, Particle=Cyan)별로 다른 색상 점을 찍어 마우스 호버 시 툴팁을 표시하는 단일 파일 HTML/JS 대시보드를 작성해줘.',
+    "recommendedPrompts": [
+      "교육용 기준은 값 > 15. CSV:\nid,value\nA,14\nB,15\nC,16\nD,\nE,18\n초과와 결측치를 나눠줘. 검증 기준: 초과 C/E, 결측 D. 현업 기준으로 사용하지 마."
     ],
-    instructorNotes: '참가자들이 데이터 시각화 결과물 예시 탭(결과물 대시보드 예시)을 참고하도록 유도하면 개발 속도가 크게 향상됩니다.',
-    isCompleted: false,
+    "instructorNotes": "30분 진행. 샘플 데이터만 사용하며 결과를 원문과 대조합니다.",
+    "isCompleted": false
   },
   {
-    id: 'session-hackathon',
-    durationMinutes: 45,
-    title: '팀별 도메인 과제 기획 & 프롬프트 집중 개발',
-    category: 'hackathon',
-    summary: '조별로 현업의 실무 Pain Point를 1개 정의하고, LLM 프롬프팅을 통해 브라우저 샌드박스에서 즉시 동작하는 프로토타입 완성',
-    objectives: [
-      '조별 브레인스토밍을 통한 해결 문제(Problem Statement) 및 기대효과 수치화',
-      '복합 프롬프트 체이닝을 통한 완성도 높은 웹 인터페이스 및 분석 알고리즘 구현',
-      '플랫폼 코드 런너(Python, JS, HTML, SQL)를 통한 실시간 기능 동작 확인 및 최종 제출',
+    "id": "mobile-4",
+    "durationMinutes": 20,
+    "title": "AI 답변 오류 검증",
+    "category": "prompting",
+    "summary": "휴대폰으로 예시를 복사하고 AI 답변을 원문과 대조합니다.",
+    "objectives": [
+      "AI 답변 오류 검증"
     ],
-    handsOnTasks: [
-      '팀 워크스페이스 [팀 정보 및 기획안] 탭에서 기획안 및 기대효과 작성',
-      '팀 대표 코드 작성 및 워크스페이스 [코드 구현 & 실시간 런너]에서 테스트',
-      '최종 제출 완료 버튼 클릭 및 Firestore 동기화 확인',
+    "handsOnTasks": [
+      "예시를 AI 앱에 붙여넣기",
+      "원문과 비교하여 누락·추측·계산 오류 수정",
+      "검증된 결과와 사용한 프롬프트 제출"
     ],
-    recommendedPrompts: [
-      '우리 팀은 "포토 공정 스캐너 오버레이 오차 자동 보정 및 샷별 잔여오차 트렌드 모니터링"을 주제로 선정했습니다. 기존 일일 2시간 소요되던 엑셀 분석을 5분으로 단축하는 기획안 요약문과 기대효과를 전문 반도체 엔지니어 용어로 3줄로 작성해주세요.',
+    "recommendedPrompts": [
+      "원문 A=14 B=15 C=16, 초과는 >15, 원인 미확인. 답변: B/C 초과, 센서 고장 원인, A 미측정. 오류 3개를 근거와 함께 수정해줘."
     ],
-    instructorNotes: '취합 현황을 모니터링하며 미제출 조를 호명하거나 찾아가 프롬프트 에러 디버깅을 적극 지원합니다.',
-    isCompleted: false,
+    "instructorNotes": "20분 진행. 샘플 데이터만 사용하며 결과를 원문과 대조합니다.",
+    "isCompleted": false
   },
   {
-    id: 'session-pitching',
-    durationMinutes: 35,
-    title: '팀별 릴레이 라이브 피칭 & 실시간 상호 평가 (Peer Review)',
-    category: 'pitching',
-    summary: '강사용 발표 무대(Team Presentation Stage)를 대형 프로젝터에 띄우고, 각 조별 릴레이 발표 및 전원 실시간 투표 진행',
-    objectives: [
-      '참가 조의 반도체 생산성 혁신 아이디어 및 구현물 공유',
-      '실시간 코드 런너를 통한 라이브 시연 및 질문 답변',
-      '혁신성(Innovation), 실무적용성(Practicality), 완성도(Completeness) 다면 평가',
+    "id": "mobile-5",
+    "durationMinutes": 10,
+    "title": "휴식",
+    "category": "orientation",
+    "summary": "휴대폰으로 예시를 복사하고 AI 답변을 원문과 대조합니다.",
+    "objectives": [
+      "휴식"
     ],
-    handsOnTasks: [
-      '강사의 호명에 따라 팀 발표 진행 (발표 타이머 가동)',
-      '청중(참가자 전원)은 모바일 또는 PC에서 즉시 해당 팀에 투표 및 피드백 태그 전달',
-      '투표 현황 실시간 집계 반영 확인',
+    "handsOnTasks": [
+      "10분 휴식"
     ],
-    recommendedPrompts: [
-      '3분 스피치용 발표 대본을 작성해주세요: 1) 배경 및 Pain Point (30초), 2) LLM 프롬프트 해결 전략 및 기술적 포인트 (1분), 3) 실시간 라이브 코드 시연 (1분), 4) 기대 생산성 및 사내 확산 효과 (30초).',
-    ],
-    instructorNotes: '강사용 상단의 [발표 무대] 버튼을 누르고 전체화면으로 띄워 진행합니다. 팀 전환 시 타이머가 자동 연동됩니다.',
-    isCompleted: false,
+    "recommendedPrompts": [],
+    "instructorNotes": "10분 진행. 샘플 데이터만 사용하며 결과를 원문과 대조합니다.",
+    "isCompleted": false
   },
   {
-    id: 'session-award',
-    durationMinutes: 15,
-    title: '결과 집계, 우수 혁신팀 시상식 & 총평',
-    category: 'award',
-    summary: '실시간 투표 및 동료 평가 점수를 기반으로 포디움 시상식 진행 및 반도체 현업 적용 확산을 위한 강사 총평',
-    objectives: [
-      '실시간 순위(Leaderboard Podium) 공개 및 우수작 축하',
-      '수상팀들의 차별화된 프롬프트 기법 분석 및 시사점 도출',
-      '사내 보안 가이드라인 준수 및 실제 FAB 현업 배치 전략 공유',
+    "id": "mobile-6",
+    "durationMinutes": 25,
+    "title": "재사용 스킬 만들기",
+    "category": "prompting",
+    "summary": "휴대폰으로 예시를 복사하고 AI 답변을 원문과 대조합니다.",
+    "objectives": [
+      "재사용 스킬 만들기"
     ],
-    handsOnTasks: [
-      '실시간 순위 탭에서 1~3위 수상팀 발표 감상',
-      '우수 코드 복사 및 향후 실무 활용을 위한 백업(JSON 내보내기)',
-      '워크숍 설문 참여',
+    "handsOnTasks": [
+      "예시를 AI 앱에 붙여넣기",
+      "원문과 비교하여 누락·추측·계산 오류 수정",
+      "검증된 결과와 사용한 프롬프트 제출"
     ],
-    recommendedPrompts: [
-      '이번 반도체 생산성 해커톤에서 도출된 상위 우수 아이디어 3건을 우리 사업부 현업 보안 규정에 맞춰 프라이빗 LLM 서버에 배포하기 위한 4단계 실행 로드맵을 작성해주세요.',
+    "recommendedPrompts": [
+      "인수인계 요약 스킬을 목적·입력·절차·출력·검증으로 작성해줘. 추측 금지, 누락 질문 규칙을 포함해. 정상 메모와 빈 메모에 적용해줘. 이 명세를 새 AI 대화에 붙여넣어 재사용하겠다."
     ],
-    instructorNotes: '상단 [투표 마감] 버튼을 눌러 추가 투표를 마감한 후 [🏆 실시간 순위] 탭을 프로젝터에 띄워 드라마틱하게 공개합니다.',
-    isCompleted: false,
+    "instructorNotes": "25분 진행. 샘플 데이터만 사용하며 결과를 원문과 대조합니다.",
+    "isCompleted": false
   },
+  {
+    "id": "mobile-7",
+    "durationMinutes": 25,
+    "title": "에이전트 흐름 체험",
+    "category": "prompting",
+    "summary": "휴대폰으로 예시를 복사하고 AI 답변을 원문과 대조합니다.",
+    "objectives": [
+      "에이전트 흐름 체험"
+    ],
+    "handsOnTasks": [
+      "예시를 AI 앱에 붙여넣기",
+      "원문과 비교하여 누락·추측·계산 오류 수정",
+      "검증된 결과와 사용한 프롬프트 제출"
+    ],
+    "recommendedPrompts": [
+      "입력 A=14 B=17, 기준 >15. 분석→원본 검증→보고 순서로 한 단계씩 수행하고 매 단계 내 승인을 기다려줘. 외부 도구 연결 없는 대화형 에이전트 체험이다. 실제 자동화에는 별도 도구 연결이 필요하다."
+    ],
+    "instructorNotes": "25분 진행. 샘플 데이터만 사용하며 결과를 원문과 대조합니다.",
+    "isCompleted": false
+  },
+  {
+    "id": "mobile-8",
+    "durationMinutes": 20,
+    "title": "팀 업무 적용안 제출",
+    "category": "prompting",
+    "summary": "휴대폰으로 예시를 복사하고 AI 답변을 원문과 대조합니다.",
+    "objectives": [
+      "팀 업무 적용안 제출"
+    ],
+    "handsOnTasks": [
+      "예시를 AI 앱에 붙여넣기",
+      "원문과 비교하여 누락·추측·계산 오류 수정",
+      "검증된 결과와 사용한 프롬프트 제출"
+    ],
+    "recommendedPrompts": [
+      "우리 업무 [업무]의 입력·프롬프트·결과·검증·사람 확인 지점을 작성해줘. 시간 절감은 실측과 예상을 구분하고 측정하지 않은 값은 미측정으로 표시해."
+    ],
+    "instructorNotes": "20분 진행. 샘플 데이터만 사용하며 결과를 원문과 대조합니다.",
+    "isCompleted": false
+  },
+  {
+    "id": "mobile-9",
+    "durationMinutes": 10,
+    "title": "대표 사례와 마무리",
+    "category": "prompting",
+    "summary": "휴대폰으로 예시를 복사하고 AI 답변을 원문과 대조합니다.",
+    "objectives": [
+      "대표 사례와 마무리"
+    ],
+    "handsOnTasks": [
+      "예시를 AI 앱에 붙여넣기",
+      "원문과 비교하여 누락·추측·계산 오류 수정",
+      "검증된 결과와 사용한 프롬프트 제출"
+    ],
+    "recommendedPrompts": [
+      "내 업무에 적용할 과제 1개, 필요한 입력, 검증 방법, 다음 학습 내용을 정리하도록 질문해줘."
+    ],
+    "instructorNotes": "대표 2~3팀만 공유합니다.",
+    "isCompleted": false
+  }
+];
+
+export const OPTIONAL_CURRICULUM_SESSIONS: CurriculumSession[] = [
+  {
+    "id": "agent-1",
+    "title": "에이전트 ① 요구사항·도구 계약",
+    "summary": "입력과 완료 조건을 정하고 도구 호출 규격을 만듭니다.",
+    "handsOnTasks": [
+      "5분: 인수인계 에이전트 목표 정의",
+      "10분: read_measurements / classify / draft_report 입출력 작성",
+      "10분: 정상·결측·경계값 테스트 정의",
+      "5분: 계약 검토"
+    ],
+    "durationMinutes": 30,
+    "category": "hackathon",
+    "objectives": [
+      "도구별 입력·출력 표와 테스트 3건"
+    ],
+    "recommendedPrompts": [
+      "인수인계 에이전트를 설계해줘. 교육용 데이터 A=14 B=15 C=16 D=결측, 초과 기준 >15. read_measurements, classify, draft_report 도구의 입력 JSON과 출력 JSON, 실패 조건을 정의해줘. 기대 결과는 C만 초과, D는 확인 필요다. 데이터 읽기는 읽기 전용, 최종 보고는 사람 승인 후 완료한다. 아직 코드를 만들지 말고 계약부터 확인받아."
+    ],
+    "instructorNotes": "에이전트 ①→②→③ 순서로 선택합니다. 생성 HTML은 학생이 실행하며 실제 실행 결과와 설명을 구분합니다.",
+    "isCompleted": false
+  },
+  {
+    "id": "agent-2",
+    "title": "에이전트 ② 실행 가능한 HTML 프로토타입",
+    "summary": "설계한 도구를 JavaScript 함수로 구현하고 호출 기록을 확인합니다.",
+    "handsOnTasks": [
+      "5분: 앞 모듈 계약 붙여넣기",
+      "10분: 단일 HTML 생성",
+      "10분: 실행·단계 버튼 조작",
+      "5분: 결과와 도구 기록 비교"
+    ],
+    "durationMinutes": 30,
+    "category": "hackathon",
+    "objectives": [
+      "동작하는 HTML과 단계별 호출 기록"
+    ],
+    "recommendedPrompts": [
+      "단일 HTML로 교육용 에이전트 프로토타입을 만들어줘. CSS/JS 포함, 외부 라이브러리·API 키·서버 없이 실행. A=14 B=15 C=16 D=빈값, 초과 >15를 기본 입력으로 제공. read_measurements→classify→draft_report를 실제 JS 함수로 구현해 각 단계 버튼, 상태, 입력/출력 로그, 재시작 버튼을 제공해줘. 최종 보고는 승인 버튼을 누른 뒤 표시해. D는 오류로 분리하고 C만 초과. 휴대폰 한 열 화면, 큰 버튼. LLM이 자동으로 도구를 선택하는 자율 에이전트가 아니라 고정 순서 도구 실행 프로토타입임을 표시해."
+    ],
+    "instructorNotes": "에이전트 ①→②→③ 순서로 선택합니다. 생성 HTML은 학생이 실행하며 실제 실행 결과와 설명을 구분합니다.",
+    "isCompleted": false
+  },
+  {
+    "id": "agent-3",
+    "title": "에이전트 ③ 실패·수정·재검증",
+    "summary": "오류를 의도적으로 넣고 원인을 찾아 재실행합니다.",
+    "handsOnTasks": [
+      "5분: 빈 입력·문자·경계값 넣기",
+      "10분: 로그와 기대값 비교",
+      "10분: 수정 프롬프트로 HTML 갱신",
+      "5분: 동일 테스트 재실행"
+    ],
+    "durationMinutes": 30,
+    "category": "hackathon",
+    "objectives": [
+      "실패 기록·수정 HTML·재시험 결과"
+    ],
+    "recommendedPrompts": [
+      "앞서 만든 HTML을 점검하자. 테스트: 전체 빈 입력은 보고 금지, 값 15는 정상, 16은 초과, abc는 입력 오류, 승인 전 최종 보고 금지. 각 테스트의 실제 결과를 내가 제공할 때까지 기다려. 실패하면 원인과 최소 수정안을 설명하고 수정된 전체 HTML을 반환해. 같은 테스트를 다시 수행할 체크리스트도 제공해. 네가 실제 실행하지 않은 테스트를 통과했다고 주장하지 마."
+    ],
+    "instructorNotes": "에이전트 ①→②→③ 순서로 선택합니다. 생성 HTML은 학생이 실행하며 실제 실행 결과와 설명을 구분합니다.",
+    "isCompleted": false
+  },
+  {
+    "id": "extra-1",
+    "title": "업무 문서에서 체크리스트 만들기",
+    "summary": "짧은 작업 메모를 실행 가능한 확인 항목으로 바꿉니다.",
+    "handsOnTasks": [
+      "5분: 샘플 읽기",
+      "10분: 체크리스트 생성",
+      "10분: 누락과 추측 검증",
+      "5분: 결과 제출"
+    ],
+    "durationMinutes": 30,
+    "category": "hackathon",
+    "objectives": [
+      "근거가 연결된 체크리스트"
+    ],
+    "recommendedPrompts": [
+      "교육용 메모: 점검 전 담당자 확인, 측정값 기록, 기준 초과 시 담당자 보고, 원인 미확인 시 추가 확인. 이를 순서·확인 증거·담당 확인 항목으로 정리해줘. 원문에 없는 장비 조작 절차는 추가하지 마. 담당자가 없으면 미정으로 표시해."
+    ],
+    "instructorNotes": "완료 결과물을 원문과 대조합니다.",
+    "isCompleted": false
+  },
+  {
+    "id": "extra-2",
+    "title": "두 버전 보고서 비교",
+    "summary": "수정 내역과 확인할 질문을 분리합니다.",
+    "handsOnTasks": [
+      "5분: 두 문서 읽기",
+      "10분: 차이 추출",
+      "10분: 근거 검증",
+      "5분: 질문 작성"
+    ],
+    "durationMinutes": 30,
+    "category": "hackathon",
+    "objectives": [
+      "변경 비교표·확인 질문"
+    ],
+    "recommendedPrompts": [
+      "교육용 보고 v1: 알람 3건, 원인 미확인, 재점검 14시. v2: 알람 2건, 원인 미확인, 재점검 15시. 추가된 사실·변경된 사실·변경되지 않은 사실을 표로 작성해줘. 건수 감소 이유는 추측하지 말고 확인 질문으로 남겨줘."
+    ],
+    "instructorNotes": "완료 결과물을 원문과 대조합니다.",
+    "isCompleted": false
+  },
+  {
+    "id": "extra-3",
+    "title": "HTML 업무 대시보드 만들기",
+    "summary": "검증 가능한 작은 표와 필터를 직접 조작합니다.",
+    "handsOnTasks": [
+      "5분: KPI와 기준 정의",
+      "10분: HTML 생성",
+      "10분: 필터·경계값 검증",
+      "5분: 결과 제출"
+    ],
+    "durationMinutes": 30,
+    "category": "hackathon",
+    "objectives": [
+      "단일 HTML과 기대값 대조 결과"
+    ],
+    "recommendedPrompts": [
+      "단일 HTML/CSS/JS로 교육용 계측 대시보드를 만들어줘. A=14 B=15 C=16 D=결측, 기준 >15. 전체/정상/초과/결측 필터, 건수 카드, 원본 표를 넣어줘. 초과 C 1건, 결측 D 1건을 확인할 수 있어야 해. 외부 CDN·React·서버 없이 실행하며 모바일 한 열과 44px 이상 버튼을 사용해."
+    ],
+    "instructorNotes": "완료 결과물을 원문과 대조합니다.",
+    "isCompleted": false
+  }
 ];
 
 export const DEFAULT_LECTURE_MATERIALS: LectureMaterial[] = [
@@ -180,6 +353,12 @@ export const DEFAULT_LECTURE_MATERIALS: LectureMaterial[] = [
 - **실무 적용성 (30%)**: 내일 당장 FAB 현업 라인에 가져가서 쓸 수 있는가?
 - **발표력 & 시연 완성도 (20%)**: 3분 동안 명확한 핵심 전달 및 코드 라이브 시연 성공 여부
 - **프롬프트 품질 (20%)**: 재현 가능하고 모듈화된 고수준의 엔지니어링 프롬프트를 구성했는가?
+
+## 5. 스킬과 에이전트 만들기
+- **스킬**: 특정 업무를 반복 실행할 수 있도록 목적, 입력, 절차, 출력 형식, 검증 규칙을 정리한 재사용 지침입니다.
+- **에이전트**: 스킬과 도구를 순서대로 호출해 업무를 수행하는 실행 흐름입니다. 데이터 읽기, 분석, 결과 검증, 보고서 작성처럼 단계를 나눕니다.
+- **실습 순서**: ① 반복 업무 선택 ② 입력·완료 조건 정의 ③ 스킬 명세 작성 ④ 에이전트 단계 설계 ⑤ 정상·오류 입력 테스트 ⑥ 사람 승인 지점 확인
+- 운영 적용 전에는 외부 전송, 데이터 변경, 설비 제어 단계에 사람 승인 절차를 둡니다.
 `,
   },
   {
@@ -218,6 +397,13 @@ export const DEFAULT_LECTURE_MATERIALS: LectureMaterial[] = [
 3. 상단에 총 결함 수, 결함 밀도(D0), 수율(Pass %) 핵심 요약 카드
 4. 특정 결함 유형만 토글하여 볼 수 있는 필터 버튼
 \`\`\`
+
+## 3. 실습 전 데이터 품질 체크리스트
+1. CSV 헤더를 실제 파일과 대조하고, 컬럼명 대소문자와 구분자를 확인합니다.
+2. 좌표 단위(mm), 계측 단위(nm/ohm/sq), 비율(%)을 프롬프트에 명시합니다.
+3. 결측치·중복 행·이상치 처리 규칙을 코드 생성 전에 결정합니다.
+4. 분석 결과의 표본 수, 필터 조건, 계산식을 원본 데이터와 대조합니다.
+5. 실제 생산 데이터·개인정보·장비 식별자는 입력하지 않고 샘플 데이터로 검증합니다.
 `,
   },
 ];

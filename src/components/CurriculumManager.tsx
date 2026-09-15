@@ -32,9 +32,12 @@ import {
   PlusCircle,
 } from 'lucide-react';
 import { CurriculumSession, CurriculumCategory, LectureMaterial } from '../types';
-import { DEFAULT_CURRICULUM_SESSIONS, DEFAULT_LECTURE_MATERIALS } from '../data/curriculumData';
+import { DEFAULT_CURRICULUM_SESSIONS, OPTIONAL_CURRICULUM_SESSIONS, DEFAULT_LECTURE_MATERIALS } from '../data/curriculumData';
+import { db } from '../utils/firebase';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 interface CurriculumManagerProps {
+  sessionId?: string;
   sessions?: CurriculumSession[];
   onUpdateSessions?: (sessions: CurriculumSession[]) => void;
   materials?: LectureMaterial[];
@@ -44,7 +47,7 @@ interface CurriculumManagerProps {
   readOnly?: boolean; // If true (e.g. for students), hide upload and edit controls
 }
 
-const STORAGE_KEY_SESSIONS = 'llm_curriculum_sessions_v4_3h_custom';
+const STORAGE_KEY_SESSIONS = 'llm_curriculum_sessions_v5_mobile_180';
 const STORAGE_KEY_MATERIALS = 'llm_lecture_materials_v1';
 
 interface SessionFormData {
@@ -59,6 +62,7 @@ interface SessionFormData {
 }
 
 export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
+  sessionId = new URLSearchParams(window.location.search).get('session') || localStorage.getItem('semiconductor_active_session_id') || '2026onboarding',
   sessions: propSessions,
   onUpdateSessions,
   materials: propMaterials,
@@ -261,6 +265,51 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
 
   // Copied prompt feedback
   const [copiedPromptIndex, setCopiedPromptIndex] = useState<string | null>(null);
+  const [shareNotice, setShareNotice] = useState('');
+  const moduleBank = [...DEFAULT_CURRICULUM_SESSIONS, ...OPTIONAL_CURRICULUM_SESSIONS];
+  const selectedMinutes = sessions.reduce((total, s) => total + s.durationMinutes, 0);
+  const toggleModule = (module: CurriculumSession) => {
+    if (sessions.length === 1 && sessions[0].id === module.id) {
+      setShareNotice('수업에는 최소 한 모듈이 필요합니다.');
+      return;
+    }
+    updateSessions(sessions.some(s => s.id === module.id)
+      ? sessions.filter(s => s.id !== module.id)
+      : [...sessions, module]);
+  };
+  const selectAgentCourse = () => {
+    const ids = ['mobile-1', 'mobile-2', 'mobile-5', 'agent-1', 'agent-2', 'agent-3', 'mobile-8', 'mobile-9'];
+    updateSessions(ids.map(id => {
+      const module = moduleBank.find(s => s.id === id)!;
+      return id === 'mobile-8' ? { ...module, durationMinutes: 30, instructorNotes: '30분: 결과 제출 20분 + 다른 팀의 테스트 재현 10분.' } : module;
+    }));
+  };
+  useEffect(() => {
+    if (!readOnly) return;
+    setSessions(DEFAULT_CURRICULUM_SESSIONS);
+    return onSnapshot(doc(db, 'sessions', sessionId), snapshot => {
+      const shared = snapshot.data()?.publicPrompts;
+      if (Array.isArray(shared)) setSessions(shared.map((s: any) => ({
+        ...s, category: 'prompting', summary: '', objectives: [], handsOnTasks: [],
+      })));
+    }, () => setShareNotice('공유 연결을 확인해주세요. 기본 예시를 표시합니다.'));
+  }, [readOnly, sessionId]);
+  const publishPrompts = async () => {
+    if (!sessions.length) { setShareNotice('공개할 모듈을 하나 이상 선택하세요.'); return; }
+    const agentIds = sessions.filter(s => s.id.startsWith('agent-')).map(s => s.id);
+    if (agentIds.length && agentIds.join(',') !== ['agent-1', 'agent-2', 'agent-3'].slice(0, agentIds.length).join(',')) {
+      setShareNotice('에이전트 모듈은 ①부터 순서대로 선택해주세요. 집중형 버튼으로 순서를 맞출 수 있습니다.');
+      return;
+    }
+    try {
+      await setDoc(doc(db, 'sessions', sessionId), {
+        publicPrompts: sessions.map(({ id, title, durationMinutes, recommendedPrompts }) => ({
+          id, title, durationMinutes, recommendedPrompts: recommendedPrompts || [],
+        })),
+      }, { merge: true });
+      setShareNotice('학생에게 프롬프트 예시를 공개했습니다.');
+    } catch { setShareNotice('공개 실패. 연결 상태를 확인하고 다시 시도하세요.'); }
+  };
 
   // File Upload Handling
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -497,8 +546,44 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
     }
   };
 
+  if (readOnly) return (
+    <section className="space-y-4">
+      <h2 className="text-xl font-bold">실습 시작 · 프롬프트 예시</h2>
+      <p>예시 복사 → 사용 가능한 AI 앱에 붙여넣기 → 원문 대조 → 실습 결과 제출</p>
+      <p role="status">{shareNotice}</p>
+      {sessions.map(s => <article key={s.id} className="rounded-xl border border-slate-700 p-4 space-y-3">
+        <h3 className="font-bold">{s.title} · {s.durationMinutes}분</h3>
+        {(s.recommendedPrompts || []).map((p, i) => <div key={i} className="space-y-2">
+          <p className="text-base whitespace-pre-wrap">{p}</p>
+          <button className="min-h-11 px-4 bg-indigo-600 rounded-lg" onClick={async () => {
+            try { await navigator.clipboard.writeText(p); setCopiedPromptIndex(s.id + i); }
+            catch { setShareNotice('복사 실패. 예시 문장을 길게 눌러 복사해주세요.'); }
+          }}>{copiedPromptIndex === s.id + i ? '복사 완료' : '예시 복사'}</button>
+        </div>)}
+      </article>)}
+    </section>
+  );
   return (
     <div className="space-y-4">
+      <section className="rounded-xl border border-indigo-700 p-4 space-y-3">
+        <h2 className="font-bold text-lg">360분 모듈 은행 · 필요한 수업 선택</h2>
+        <p>기본 180분(휴식 10분 포함) + 추가 실습 180분. 선택한 순서로 진행하고 공개 버튼으로 학생에게 전달합니다.</p>
+        <p role="status">선택 {selectedMinutes}분 / 목표 180분 · {selectedMinutes === 180 ? '3시간 구성 완료' : selectedMinutes > 180 ? (selectedMinutes - 180) + '분 초과' : (180 - selectedMinutes) + '분 더 선택 가능'}</p>
+        <div className="flex flex-wrap gap-2">
+          <button className="min-h-11 px-3 bg-indigo-600 rounded" onClick={() => updateSessions(DEFAULT_CURRICULUM_SESSIONS)}>기본형 180분</button>
+          <button className="min-h-11 px-3 bg-indigo-600 rounded" onClick={selectAgentCourse}>에이전트 집중형 180분</button>
+        </div>
+        <p>에이전트 집중형: 준비 15 → 요약 25 → 휴식 10 → 설계·구현·재검증 90 → 제출·동료 재현 30 → 공유 10분</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {moduleBank.map(module => <label key={module.id} className="flex gap-3 items-center p-3 border border-slate-700 rounded">
+            <input type="checkbox" checked={sessions.some(s => s.id === module.id)} onChange={() => toggleModule(module)} />
+            <span>{module.title} · {sessions.find(s => s.id === module.id)?.durationMinutes ?? module.durationMinutes}분</span>
+          </label>)}
+        </div>
+        <p>에이전트 실습은 ① 설계 → ② HTML 구현 → ③ 실패·수정·재검증 순서로 선택하세요. 각 모듈의 상세 내용은 아래 타임라인에서 확인할 수 있습니다.</p>
+      </section>
+      <button onClick={publishPrompts} className="min-h-11 px-4 bg-indigo-600 rounded-lg">학생에게 현재 프롬프트 공개</button>
+      <p role="status">{shareNotice}</p>
       {/* Hidden File Input */}
       <input
         type="file"
@@ -617,7 +702,7 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
                 {sessions.length}
               </span>
             </button>
-            <button
+            {!readOnly && <button
               onClick={() => setActiveSubTab('materials')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 activeSubTab === 'materials'
@@ -630,7 +715,7 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
               <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-700">
                 {materials.length}
               </span>
-            </button>
+            </button>}
           </div>
 
           <div className="text-[11px] text-slate-400 hidden sm:flex items-center gap-2 font-mono">
@@ -943,7 +1028,7 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
               )}
 
               {/* Associated Materials Shortcut */}
-              <div className="pt-2 flex items-center justify-between text-xs text-slate-400">
+              {!readOnly && <div className="pt-2 flex items-center justify-between text-xs text-slate-400">
                 <span>관련 강의안 파일 열람이 필요하신가요?</span>
                 <button
                   onClick={() => setActiveSubTab('materials')}
@@ -952,7 +1037,7 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
                   <span>강의안 보관함 바로가기</span>
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
-              </div>
+              </div>}
             </div>
           </div>
         </div>
@@ -1050,7 +1135,7 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
                         {/* Share status */}
                         <div className="flex items-center gap-1.5">
                           {!readOnly && (
-                            <button
+                          <button
                               onClick={() => handleToggleShare(mat.id)}
                               className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
                                 mat.isSharedWithStudents
@@ -1065,7 +1150,7 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
                             >
                               <Share2 className="w-3 h-3" />
                               <span>{mat.isSharedWithStudents ? '교육생 공유됨' : '강사 전용'}</span>
-                            </button>
+                          </button>
                           )}
                         </div>
 

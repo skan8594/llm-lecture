@@ -25,3 +25,8 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #3b82f6;
 }
+/* Phone inputs remain readable when the software keyboard is open. */
+@media (max-width: 640px) {
+  input, textarea, select { font-size: 16px !important; }
+  button { min-height: 44px; }
+}

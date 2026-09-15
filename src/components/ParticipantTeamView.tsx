@@ -77,7 +77,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
   onOpenFirebaseModal,
 }) => {
   // Navigation Tabs: 'info' | 'code' | 'assets' | 'datasets' | 'dashboard' | 'voting' | 'curriculum'
-  const [activeTab, setActiveTab] = useState<'info' | 'code' | 'assets' | 'datasets' | 'dashboard' | 'voting' | 'curriculum'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'code' | 'assets' | 'datasets' | 'dashboard' | 'voting' | 'curriculum'>('curriculum');
 
   // ==================== TAB 1: TEAM INFO STATE ====================
   const [teamName, setTeamName] = useState(team.teamName || '');
@@ -131,15 +131,39 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
   const [title, setTitle] = useState(myTeamSubmission?.title || '');
   const [promptUsed, setPromptUsed] = useState(myTeamSubmission?.promptUsed || '');
   const [code, setCode] = useState(myTeamSubmission?.code || '');
-  const [language, setLanguage] = useState<CodeLanguage>(myTeamSubmission?.language || 'python');
+  const [language, setLanguage] = useState<CodeLanguage>(myTeamSubmission?.language || 'json');
   const [sampleInput, setSampleInput] = useState(myTeamSubmission?.sampleInput || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [showRunnerPreview, setShowRunnerPreview] = useState(false);
+  const draftKey = 'mobile-draft-' + sessionId + '-' + teamNumber;
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftNotice, setDraftNotice] = useState('');
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(draftKey);
+      if (saved) {
+        const draft = JSON.parse(saved);
+        setTitle(draft.title || '');
+        setPromptUsed(draft.promptUsed || '');
+        setCode(draft.code || '');
+        setLanguage(draft.language || 'json');
+        setSampleInput(draft.sampleInput || '');
+      }
+    } catch { setDraftNotice('초안을 복원하지 못했습니다.'); }
+    setDraftReady(true);
+  }, [draftKey]);
+  useEffect(() => {
+    if (!draftReady) return;
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({ title, promptUsed, code, language, sampleInput }));
+      setDraftNotice('이 휴대폰에 초안 저장됨');
+    } catch { setDraftNotice('초안 저장 실패: 제출 전 내용을 복사해 보관하세요.'); }
+  }, [draftReady, draftKey, title, promptUsed, code, language, sampleInput]);
 
   // Update form if submission already exists
   useEffect(() => {
-    if (myTeamSubmission) {
+    if (myTeamSubmission && !localStorage.getItem(draftKey)) {
       setTitle(myTeamSubmission.title);
       setPromptUsed(myTeamSubmission.promptUsed || '');
       setCode(myTeamSubmission.code);
@@ -192,6 +216,10 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
 
   const handleSubmitCode = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (language !== 'html' && language !== 'json') {
+      alert('제출 형식을 단일 HTML 또는 업무 결과 텍스트로 선택해주세요.');
+      return;
+    }
     if (!title.trim() || !code.trim()) return;
 
     setIsSubmitting(true);
@@ -206,7 +234,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
         sampleInput: sampleInput.trim(),
         promptUsed: promptUsed.trim(),
         description: problemStatement.trim() || title.trim(),
-        productivityImpact: productivityImpact.trim() || '업무 처리 시간 80% 단축',
+        productivityImpact: productivityImpact.trim() || '효과 미측정',
         category,
       });
 
@@ -411,7 +439,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
         </div>
 
         {/* ================= 4 DEDICATED TABS (DIVIDED TEAM MENU) ================= */}
-        <div className="max-w-5xl mx-auto mt-2.5 flex items-center gap-1 border-b border-slate-800 overflow-x-auto no-scrollbar">
+        <div className="max-w-5xl mx-auto mt-2.5 flex flex-wrap items-center gap-1 border-b border-slate-800">
           {/* Sub-tab 1: Team Info & Project Planning */}
           <button
             onClick={() => setActiveTab('info')}
@@ -435,7 +463,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
             }`}
           >
             <FileCode className="w-3.5 h-3.5" />
-            <span>2. 대표 코드 & 결과물 제출</span>
+            <span>실습 결과 제출</span>
             {myTeamSubmission && (
               <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block ml-0.5" />
             )}
@@ -519,7 +547,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
             }`}
           >
             <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
-            <span>7. 교육 커리큘럼 & 강의안</span>
+            <span>실습 시작 · 프롬프트</span>
           </button>
         </div>
       </header>
@@ -673,7 +701,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
                 </div>
                 <div>
                   <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                    <span>제 {teamNumber} 조 대표 과제 코드 제출</span>
+                    <span>제 {teamNumber} 조 실습 결과 제출</span>
                     {myTeamSubmission ? (
                       <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-800">
                         제출 완료 (수정 가능)
@@ -749,6 +777,12 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
             )}
 
             {/* Submission Form */}
+            <p className="text-base text-indigo-200 rounded-xl border border-indigo-800 p-4">
+              실행형 결과물은 CSS와 JavaScript를 포함한 단일 HTML 파일로 제출하세요.
+              외부 라이브러리 설치나 서버 없이 휴대폰 브라우저에서 실행되도록 요청하세요.
+              요약문·분석 표·스킬 명세는 업무 결과 텍스트로 제출할 수 있습니다.
+              Python·SQL 및 JavaScript 단독 코드는 이번 실습 제출 대상이 아닙니다.
+            </p>
             <form onSubmit={handleSubmitCode} className="space-y-4">
               {/* Project Title */}
               <div>
@@ -783,7 +817,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-semibold text-slate-300">
-                    자동화 코드 작성 (라이브 시연 가능)
+                    AI 결과와 검증 기록 (코드 없이 제출 가능)
                   </label>
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] text-slate-400">개발 언어:</span>
@@ -792,10 +826,11 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
                       onChange={(e) => setLanguage(e.target.value as CodeLanguage)}
                       className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
                     >
-                      <option value="python">Python (Pyodide 샌드박스)</option>
-                      <option value="javascript">JavaScript / Node</option>
-                      <option value="html">HTML / Interactive</option>
-                      <option value="sql">SQL Query</option>
+                      <option value="json">업무 결과 텍스트 (실행 없음)</option>
+                      <option value="html">단일 HTML (CSS·JavaScript 포함)</option>
+                      {language !== 'html' && language !== 'json' && (
+                        <option value={language} disabled>기존 {language} 자료 · 제출 형식 변경 필요</option>
+                      )}
                     </select>
                   </div>
                 </div>
@@ -805,7 +840,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
                   required
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
-                  placeholder="// 여기에 Python, JavaScript 또는 HTML 코드를 작성하세요..."
+                  placeholder="AI 답변, 원문과 대조한 내용, 수정한 오류, 업무 적용 아이디어를 적어주세요."
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs font-mono text-emerald-400 focus:outline-none focus:border-indigo-500 transition-colors resize-y leading-relaxed"
                 />
               </div>
@@ -841,7 +876,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
                       <span>실시간 샌드박스 실행 결과</span>
                       <span className="font-mono text-indigo-400">{language.toUpperCase()}</span>
                     </div>
-                    <div className="h-64 rounded-lg overflow-hidden border border-slate-850">
+                    <div className="min-h-[420px] rounded-lg border border-slate-850">
                       <CodeRunner
                         code={code}
                         language={language}
@@ -856,7 +891,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
               {/* Submit Buttons */}
               <div className="flex items-center justify-between pt-4 border-t border-slate-800">
                 <span className="text-xs text-slate-400">
-                  {myTeamSubmission ? '수정 후 다시 제출하시면 업데이트됩니다.' : '제출 후에도 언제든 수정 가능합니다.'}
+                  {draftNotice}
                 </span>
 
                 <div className="flex items-center gap-3">
@@ -1285,7 +1320,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
         {/* TAB 7: CURRICULUM & LECTURE MATERIALS (STUDENT READ-ONLY VIEW)    */}
         {/* ================================================================= */}
         {activeTab === 'curriculum' && (
-          <CurriculumManager readOnly={true} />
+          <CurriculumManager readOnly={true} sessionId={sessionId} />
         )}
       </main>
 

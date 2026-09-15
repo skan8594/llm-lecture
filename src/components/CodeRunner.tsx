@@ -21,6 +21,14 @@ export const CodeRunner: React.FC<CodeRunnerProps> = ({ code, language, title })
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const runCode = () => {
+    if (language === 'python' || language === 'sql' || language === 'json') {
+      setOutput(language === 'json' ? code : '이 페이지에서는 이 언어를 실제 실행하지 않습니다. 아래 원문을 별도 실행 환경에서 검증하세요.\n\n' + code);
+      setIsRunning(false);
+      setHasError(false);
+      setTableData(null);
+      setExecTime(null);
+      return;
+    }
     setIsRunning(true);
     setHasError(false);
     setOutput('');

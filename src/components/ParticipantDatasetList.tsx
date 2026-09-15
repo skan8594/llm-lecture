@@ -10,6 +10,7 @@ interface ParticipantDatasetListProps {
 export const ParticipantDatasetList: React.FC<ParticipantDatasetListProps> = ({ datasets, onOpenDashboard }) => {
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [downloadedIds, setDownloadedIds] = useState<Set<string>>(new Set());
+  const [copyNotice, setCopyNotice] = useState('');
 
   const handleDownload = (dataset: SampleDataset) => {
     // Add BOM for UTF-8 Excel Korean encoding support
@@ -43,6 +44,7 @@ export const ParticipantDatasetList: React.FC<ParticipantDatasetListProps> = ({ 
 
   return (
     <div className="space-y-4">
+      <p role="status">{copyNotice}</p>
       {/* Featured Dashboard Reference Callout */}
       {onOpenDashboard && (
         <div className="p-4 sm:p-5 bg-gradient-to-r from-indigo-950 via-slate-900 to-emerald-950/80 border border-indigo-500/40 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
@@ -88,7 +90,7 @@ export const ParticipantDatasetList: React.FC<ParticipantDatasetListProps> = ({ 
           </h3>
           <p className="text-xs text-slate-300 mt-1 leading-relaxed">
             강사진이 준비한 원천 반도체 제조 데이터입니다. 각 데이터셋의 [CSV 다운로드] 버튼을 눌러
-            PC에 저장한 후, <strong>LLM 프롬프트 작성</strong>이나 <strong>Python / JS 자동화 코드 개발</strong> 실습에 활용하세요.
+            저장하거나, 데이터+프롬프트 복사로 AI 앱에서 바로 분석해보세요. 복사본은 헤더와 첫 10행만 포함합니다.
           </p>
         </div>
       </div>
@@ -143,6 +145,11 @@ export const ParticipantDatasetList: React.FC<ParticipantDatasetListProps> = ({ 
                 {/* Direct Action Buttons */}
                 <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
+                    <button className="min-h-11 px-3 bg-indigo-600 rounded-lg" onClick={async () => {
+                      const prompt = '다음 교육용 CSV는 첫 10행 표본입니다. 컬럼과 단위를 설명하고 결측치를 찾아주세요. 이상 판정 기준이 없으면 질문하고, 원인이나 전체 데이터 통계를 추측하지 마세요. 결과를 원본 행과 대조할 수 있게 작성해주세요.\n\n' + dataset.csvContent.split(/\r?\n/).slice(0, 11).join('\n');
+                      try { await navigator.clipboard.writeText(prompt); setCopyNotice('데이터와 프롬프트 복사 완료'); }
+                      catch { setCopyNotice('복사 실패. CSV 다운로드를 이용해주세요.'); }
+                    }}>데이터+프롬프트 복사</button>
                     <button
                       onClick={() => setPreviewId(isPreviewOpen ? null : dataset.id)}
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-xs font-semibold transition-colors"

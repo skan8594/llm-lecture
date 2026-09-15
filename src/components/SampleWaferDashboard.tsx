@@ -277,7 +277,7 @@ export const SampleWaferDashboard: React.FC<SampleWaferDashboardProps> = ({
 3. 반경 영역별(Center, Mid, Edge) 불량 밀도 분석
 4. 다이 수율(Die Yield %), 결함 밀도(D0 ≈ 0.51 defects/cm² 공정 이상 경보), 클러스터 결함 비중 KPI 카드 4종
 5. CMP 슬러리 스크래치, 열응력 링 결함에 대한 엔지니어링 개선 권고사항
-위 요구사항을 충족하는 완전한 대시보드 코드를 작성해줘.`;
+위 요구사항을 충족하는 단일 HTML 파일을 작성해줘. CSS와 JavaScript를 파일 안에 포함하고, React·외부 CDN·설치·서버 없이 휴대폰에서 실행되도록 해줘. 차트는 Canvas 또는 SVG로 구현하고 실제 데이터에서 계산할 수 없는 지표는 계산 불가로 표시해줘.`;
     navigator.clipboard.writeText(promptText);
     setCopiedPrompt(true);
     setTimeout(() => setCopiedPrompt(false), 2500);
@@ -1164,7 +1164,7 @@ export const SampleWaferDashboard: React.FC<SampleWaferDashboardProps> = ({
               <h3 className="text-base font-bold text-white">학생들을 위한 최종 결과물 대시보드 제작 가이드</h3>
             </div>
             <p className="text-xs text-slate-400">
-              팀별 주제에 맞게 대시보드를 제작할 때 참고할 수 있는 필수 구성요소와 LLM 프롬프트, 파이썬 코드 예시입니다.
+              예시의 화면 구성과 기능을 참고해 CSS·JavaScript를 포함한 단일 HTML 파일로 제작하세요. 현재 참고 화면 자체는 React 기반입니다. Python 예시는 외부 환경 학습용이며 이번 제출 대상이 아닙니다.
             </p>
           </div>
 
@@ -1255,7 +1255,7 @@ export const SampleWaferDashboard: React.FC<SampleWaferDashboardProps> = ({
 3. 반경 영역별(Center, Mid, Edge) 불량 밀도 분석
 4. 다이 수율(Die Yield %), 결함 밀도(D0 ≈ 0.51 defects/cm² 공정 이상 상태), 클러스터 결함 비중 KPI 카드 4종
 5. CMP 슬러리 스크래치, 열응력 링 결함에 대한 엔지니어링 개선 권고사항
-위 요구사항을 충족하는 완전한 대시보드 코드를 작성해줘."`}
+위 요구사항을 충족하는 단일 HTML 파일을 작성해줘. CSS와 JavaScript를 파일 안에 포함하고 React·외부 CDN·설치·서버 없이 휴대폰에서 실행되도록 해줘. 차트는 Canvas 또는 SVG로 구현하고 실제 데이터에서 계산할 수 없는 지표는 계산 불가로 표시해줘."`}
               </pre>
             </div>
           </div>
