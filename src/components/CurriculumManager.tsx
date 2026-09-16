@@ -268,7 +268,6 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
   const [copiedPromptIndex, setCopiedPromptIndex] = useState<string | null>(null);
   const [shareNotice, setShareNotice] = useState('');
   const [hideCompleted, setHideCompleted] = useState(() => localStorage.getItem('llm_student_hide_completed') !== 'false');
-  const [prioritizeRemaining, setPrioritizeRemaining] = useState(true);
   const moduleBank = [...DEFAULT_CURRICULUM_SESSIONS, ...OPTIONAL_CURRICULUM_SESSIONS];
   const selectedMinutes = sessions.reduce((total, s) => total + s.durationMinutes, 0);
   const toggleModule = (module: CurriculumSession) => {
@@ -328,12 +327,17 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
     setTimeout(() => setCopiedPromptIndex(null), 2000);
   };
 
-  const handleToggleSessionComplete = (sessionId: string) => {
+  const handleToggleSessionComplete = (moduleId: string) => {
     if (readOnly) return;
     const next = sessions.map((s) =>
-      s.id === sessionId ? { ...s, isCompleted: !s.isCompleted } : s
+      s.id === moduleId ? { ...s, isCompleted: !s.isCompleted } : s
     );
     updateSessions(next);
+    setDoc(doc(db, 'sessions', sessionId), {
+      publicPrompts: next.map(({ id, title, recommendedPrompts, isCompleted }) => ({
+        id, title, recommendedPrompts: recommendedPrompts || [], isCompleted: Boolean(isCompleted),
+      })),
+    }, { merge: true }).catch(() => setShareNotice('완료 상태 공유에 실패했습니다. 연결 상태를 확인하세요.'));
   };
 
   // Process uploaded files
@@ -552,10 +556,9 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
       <p>예시 복사 → 사용 가능한 AI 앱에 붙여넣기 → 원문 대조 → 실습 결과 제출</p>
       <div className="flex flex-wrap gap-4 rounded-lg border border-slate-700 p-3 text-sm">
         <label className="flex items-center gap-2"><input type="checkbox" checked={hideCompleted} onChange={(e) => { setHideCompleted(e.target.checked); localStorage.setItem('llm_student_hide_completed', String(e.target.checked)); }} /> 완료한 모듈 숨기기</label>
-        <label className="flex items-center gap-2"><input type="checkbox" checked={prioritizeRemaining} onChange={(e) => setPrioritizeRemaining(e.target.checked)} /> 남은 모듈 먼저 보기</label>
       </div>
       <p role="status">{shareNotice}</p>
-      {sessions.filter(s => !hideCompleted || !s.isCompleted).sort((a, b) => prioritizeRemaining ? Number(Boolean(a.isCompleted)) - Number(Boolean(b.isCompleted)) : 0).map(s => <article key={s.id} className="rounded-xl border border-slate-700 p-4 space-y-3">
+      {sessions.filter(s => !hideCompleted || !s.isCompleted).map(s => <article key={s.id} className="rounded-xl border border-slate-700 p-4 space-y-3">
         <h3 className="font-bold">{s.title}</h3>
         {(s.recommendedPrompts || []).map((p, i) => <div key={i} className="space-y-2">
           <p className="text-base whitespace-pre-wrap">{p}</p>
