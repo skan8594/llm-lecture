@@ -34,6 +34,7 @@ import {
 import { CurriculumSession, CurriculumCategory, LectureMaterial } from '../types';
 import { DEFAULT_CURRICULUM_SESSIONS, OPTIONAL_CURRICULUM_SESSIONS, DEFAULT_LECTURE_MATERIALS } from '../data/curriculumData';
 import { db } from '../utils/firebase';
+import { upgradeCurriculum } from '../data/upgradeCurriculum';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 interface CurriculumManagerProps {
@@ -73,10 +74,10 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
 }) => {
   // Local state initialized with props or localStorage or defaults
   const [sessions, setSessions] = useState<CurriculumSession[]>(() => {
-    if (propSessions && propSessions.length > 0) return propSessions;
+    if (propSessions && propSessions.length > 0) return upgradeCurriculum(propSessions);
     try {
       const saved = localStorage.getItem(STORAGE_KEY_SESSIONS);
-      if (saved) return JSON.parse(saved);
+      if (saved) return upgradeCurriculum(JSON.parse(saved));
     } catch (e) {}
     return DEFAULT_CURRICULUM_SESSIONS;
   });
@@ -93,7 +94,7 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
   // Keep in sync with props
   useEffect(() => {
     if (propSessions && propSessions.length > 0) {
-      setSessions(propSessions);
+      setSessions(upgradeCurriculum(propSessions));
     }
   }, [propSessions]);
 
@@ -251,7 +252,7 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
     if (readOnly) return;
     if (
       !confirm(
-        '커리큘럼을 표준 3시간(180분) 템플릿으로 초기화하시겠습니까?\n작성했던 커스텀 편집 내용이 기본값으로 복원됩니다.'
+        '커리큘럼을 기본 구성으로 복원하시겠습니까?\n작성했던 커스텀 편집 내용이 기본값으로 복원됩니다.'
       )
     )
       return;
@@ -279,17 +280,14 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
   };
   const selectAgentCourse = () => {
     const ids = ['mobile-1', 'mobile-2', 'mobile-5', 'agent-1', 'agent-2', 'agent-3', 'mobile-8', 'mobile-9'];
-    updateSessions(ids.map(id => {
-      const module = moduleBank.find(s => s.id === id)!;
-      return id === 'mobile-8' ? { ...module, durationMinutes: 30, instructorNotes: '30분: 결과 제출 20분 + 다른 팀의 테스트 재현 10분.' } : module;
-    }));
+    updateSessions(ids.map(id => moduleBank.find(s => s.id === id)!));
   };
   useEffect(() => {
     if (!readOnly) return;
     setSessions(DEFAULT_CURRICULUM_SESSIONS);
     return onSnapshot(doc(db, 'sessions', sessionId), snapshot => {
       const shared = snapshot.data()?.publicPrompts;
-      if (Array.isArray(shared)) setSessions(shared.map((s: any) => ({
+      if (Array.isArray(shared)) setSessions(upgradeCurriculum(shared).map((s: any) => ({
         ...s, category: 'prompting', summary: '', objectives: [], handsOnTasks: [],
       })));
     }, () => setShareNotice('공유 연결을 확인해주세요. 기본 예시를 표시합니다.'));
@@ -303,8 +301,8 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
     }
     try {
       await setDoc(doc(db, 'sessions', sessionId), {
-        publicPrompts: sessions.map(({ id, title, durationMinutes, recommendedPrompts }) => ({
-          id, title, durationMinutes, recommendedPrompts: recommendedPrompts || [],
+        publicPrompts: sessions.map(({ id, title, recommendedPrompts }) => ({
+          id, title, recommendedPrompts: recommendedPrompts || [],
         })),
       }, { merge: true });
       setShareNotice('학생에게 프롬프트 예시를 공개했습니다.');
@@ -552,7 +550,7 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
       <p>예시 복사 → 사용 가능한 AI 앱에 붙여넣기 → 원문 대조 → 실습 결과 제출</p>
       <p role="status">{shareNotice}</p>
       {sessions.map(s => <article key={s.id} className="rounded-xl border border-slate-700 p-4 space-y-3">
-        <h3 className="font-bold">{s.title} · {s.durationMinutes}분</h3>
+        <h3 className="font-bold">{s.title}</h3>
         {(s.recommendedPrompts || []).map((p, i) => <div key={i} className="space-y-2">
           <p className="text-base whitespace-pre-wrap">{p}</p>
           <button className="min-h-11 px-4 bg-indigo-600 rounded-lg" onClick={async () => {
@@ -566,14 +564,15 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-indigo-700 p-4 space-y-3">
-        <h2 className="font-bold text-lg">360분 모듈 은행 · 필요한 수업 선택</h2>
-        <p>기본 180분(휴식 10분 포함) + 추가 실습 180분. 선택한 순서로 진행하고 공개 버튼으로 학생에게 전달합니다.</p>
-        <p role="status">선택 {selectedMinutes}분 / 목표 180분 · {selectedMinutes === 180 ? '3시간 구성 완료' : selectedMinutes > 180 ? (selectedMinutes - 180) + '분 초과' : (180 - selectedMinutes) + '분 더 선택 가능'}</p>
+        <h2 className="font-bold text-lg">실습 모듈 은행 · 필요한 수업 선택</h2>
+        <p>전체 {moduleBank.reduce((sum, s) => sum + s.durationMinutes, 0)}분(휴식 포함). 시간은 입력·답변 확인·수정 기준의 권장치이며 강의 설명과 질의응답은 별도입니다.</p>
+        <p role="status">선택 {sessions.length}개 · 권장 {selectedMinutes}분</p>
         <div className="flex flex-wrap gap-2">
-          <button className="min-h-11 px-3 bg-indigo-600 rounded" onClick={() => updateSessions(DEFAULT_CURRICULUM_SESSIONS)}>기본형 180분</button>
-          <button className="min-h-11 px-3 bg-indigo-600 rounded" onClick={selectAgentCourse}>에이전트 집중형 180분</button>
+          <button className="min-h-11 px-3 bg-indigo-600 rounded" onClick={() => updateSessions([...moduleBank.map(module => sessions.find(s => s.id === module.id) || module), ...sessions.filter(s => !moduleBank.some(module => module.id === s.id))])}>전체 선택</button>
+          <button className="min-h-11 px-3 bg-indigo-600 rounded" onClick={() => updateSessions(DEFAULT_CURRICULUM_SESSIONS)}>기본형</button>
+          <button className="min-h-11 px-3 bg-indigo-600 rounded" onClick={selectAgentCourse}>에이전트 집중형</button>
         </div>
-        <p>에이전트 집중형: 준비 15 → 요약 25 → 휴식 10 → 설계·구현·재검증 90 → 제출·동료 재현 30 → 공유 10분</p>
+        <p>간단한 요약·비교는 3~5분, 스킬·흐름 설계는 7~8분, HTML 생성·수정은 12~15분을 권장합니다.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {moduleBank.map(module => <label key={module.id} className="flex gap-3 items-center p-3 border border-slate-700 rounded">
             <input type="checkbox" checked={sessions.some(s => s.id === module.id)} onChange={() => toggleModule(module)} />
@@ -657,10 +656,10 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
                 <button
                   onClick={handleResetDefault}
                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-medium transition-colors"
-                  title="표준 3시간(180분) 템플릿으로 복원"
+                  title="기본 실습 구성으로 복원"
                 >
                   <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden xl:inline">3시간 템플릿 복원</span>
+                  <span className="hidden xl:inline">기본 구성 복원</span>
                 </button>
 
                 <button
