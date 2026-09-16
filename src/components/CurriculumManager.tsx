@@ -268,6 +268,9 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
   const [copiedPromptIndex, setCopiedPromptIndex] = useState<string | null>(null);
   const [shareNotice, setShareNotice] = useState('');
   const [hideCompleted, setHideCompleted] = useState(() => localStorage.getItem('llm_student_hide_completed') !== 'false');
+  const [studentCompleted, setStudentCompleted] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(`llm_student_completed_${sessionId}`) || '[]'); } catch { return []; }
+  });
   const moduleBank = [...DEFAULT_CURRICULUM_SESSIONS, ...OPTIONAL_CURRICULUM_SESSIONS];
   const selectedMinutes = sessions.reduce((total, s) => total + s.durationMinutes, 0);
   const toggleModule = (module: CurriculumSession) => {
@@ -558,8 +561,8 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
         <label className="flex items-center gap-2"><input type="checkbox" checked={hideCompleted} onChange={(e) => { setHideCompleted(e.target.checked); localStorage.setItem('llm_student_hide_completed', String(e.target.checked)); }} /> 완료한 모듈 숨기기</label>
       </div>
       <p role="status">{shareNotice}</p>
-      {sessions.filter(s => !hideCompleted || !s.isCompleted).map(s => <article key={s.id} className="rounded-xl border border-slate-700 p-4 space-y-3">
-        <h3 className="font-bold">{s.title}</h3>
+      {sessions.filter(s => !hideCompleted || (!s.isCompleted && !studentCompleted.includes(s.id))).map(s => <article key={s.id} className="rounded-xl border border-slate-700 p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3"><h3 className="font-bold">{s.title}</h3><button className="min-h-11 px-3 rounded-lg border border-emerald-700 text-emerald-300 text-xs" onClick={() => { const next = studentCompleted.includes(s.id) ? studentCompleted.filter(id => id !== s.id) : [...studentCompleted, s.id]; setStudentCompleted(next); localStorage.setItem(`llm_student_completed_${sessionId}`, JSON.stringify(next)); }}>{studentCompleted.includes(s.id) ? '완료 취소' : '학습 완료'}</button></div>
         {(s.recommendedPrompts || []).map((p, i) => <div key={i} className="space-y-2">
           <p className="text-base whitespace-pre-wrap">{p}</p>
           <button className="min-h-11 px-4 bg-indigo-600 rounded-lg" onClick={async () => {
