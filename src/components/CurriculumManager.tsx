@@ -279,7 +279,7 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
       : [...sessions, module]);
   };
   const selectAgentCourse = () => {
-    const ids = ['mobile-1', 'mobile-2', 'mobile-5', 'agent-1', 'agent-2', 'agent-3', 'mobile-8', 'mobile-9'];
+    const ids = ['fieldbook-intro', 'mobile-1', 'mobile-2', 'mobile-5', 'agent-1', 'agent-2', 'agent-3', 'mobile-8', 'mobile-9'];
     updateSessions(ids.map(id => moduleBank.find(s => s.id === id)!));
   };
   useEffect(() => {
