@@ -569,9 +569,9 @@ export const SampleWaferDashboard: React.FC<SampleWaferDashboardProps> = ({
       </div>
 
       {/* Main Analysis Section: 2D Wafer Map Visualizer + Defect Inspector */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left 7 Cols: Interactive 2D Circular Wafer Map */}
-        <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col items-center justify-center relative shadow-xl">
+        <div className="lg:col-span-7 lg:h-[760px] bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col items-center justify-center relative shadow-xl overflow-hidden">
           <div className="w-full flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <CircleDot className="w-4 h-4 text-indigo-400" />
@@ -845,9 +845,9 @@ export const SampleWaferDashboard: React.FC<SampleWaferDashboardProps> = ({
         </div>
 
         {/* Right 5 Cols: Die Defect Inspector & Realtime Detail */}
-        <div className="lg:col-span-5 space-y-4">
+        <div className="lg:col-span-5 lg:h-[760px] space-y-4 flex flex-col">
           {/* Defect & Die Inspector Card */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
+          <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-indigo-400" />
@@ -1025,7 +1025,7 @@ export const SampleWaferDashboard: React.FC<SampleWaferDashboardProps> = ({
           </div>
 
           {/* Quick Zone Breakdown */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3 shadow-xl">
+          <div className="lg:h-[300px] bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3 shadow-xl overflow-y-auto">
             <div className="flex items-center gap-2">
               <BarChart3 className="w-4 h-4 text-emerald-400" />
               <h3 className="text-sm font-bold text-white">웨이퍼 반경 영역별 불량 현황</h3>
