@@ -3,8 +3,6 @@ import {
   Users,
   Heart,
   Play,
-  Timer,
-  Pause,
   Trophy,
   Layers,
   Laptop,
@@ -44,6 +42,7 @@ interface PresenterDashboardProps {
   isVotingOpen: boolean;
   onToggleVoting: () => void;
   onResetData: () => void;
+  onStartNewCohort?: () => void;
   onStartTeamPresentation: (teamIndex: number) => void;
   onExportJson?: () => void;
   onImportJson?: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -66,6 +65,7 @@ export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
   isVotingOpen,
   onToggleVoting,
   onResetData,
+  onStartNewCohort,
   onStartTeamPresentation,
   onExportJson,
   onImportJson,
@@ -105,25 +105,6 @@ export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
   // Selected team for filter in analytics
   const [selectedTeam, setSelectedTeam] = useState<string>('ALL');
 
-  // Presentation Timer (default: 15 minutes)
-  const [timerSeconds, setTimerSeconds] = useState<number>(15 * 60);
-  const [isTimerRunning, setIsTimerRunning] = useState<boolean>(true);
-
-  useEffect(() => {
-    let interval: any = null;
-    if (isTimerRunning && timerSeconds > 0) {
-      interval = setInterval(() => {
-        setTimerSeconds((prev) => (prev > 0 ? prev - 1 : 0));
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [isTimerRunning, timerSeconds]);
-
-  const formatTimer = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  };
 
   // Top 3 for Podium
   const topSubmissions = [...submissions].sort((a, b) => b.votes - a.votes).slice(0, 3);
@@ -163,26 +144,6 @@ export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
 
           {/* Instructor Quick Actions */}
           <div className="flex items-center gap-2">
-            {/* Timer Widget */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-950 border border-slate-800 rounded-xl text-xs">
-              <Timer className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="font-mono font-bold text-white">{formatTimer(timerSeconds)}</span>
-              <button
-                onClick={() => setIsTimerRunning(!isTimerRunning)}
-                className="text-slate-400 hover:text-white transition-colors"
-                title={isTimerRunning ? '일시정지' : '시작'}
-              >
-                {isTimerRunning ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-              </button>
-              <button
-                onClick={() => setTimerSeconds((prev) => prev + 5 * 60)}
-                className="text-[10px] text-indigo-400 hover:text-indigo-300 px-1 py-0.5 rounded bg-slate-800 font-mono"
-                title="5분 추가"
-              >
-                +5m
-              </button>
-            </div>
-
             {/* Voting Open/Close Toggle */}
             <button
               onClick={onToggleVoting}
@@ -228,6 +189,15 @@ export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
               >
                 <Download className="w-3.5 h-3.5 text-emerald-400" />
                 <span className="hidden sm:inline">백업</span>
+              </button>
+            )}
+            {onStartNewCohort && (
+              <button
+                onClick={onStartNewCohort}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold text-amber-300 bg-amber-950/60 hover:bg-amber-900 border border-amber-800 transition-colors"
+                title="현재 데이터를 보관하고 새 교육 차수 시작"
+              >
+                <span>새 차수 시작</span>
               </button>
             )}
           </div>

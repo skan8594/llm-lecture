@@ -692,6 +692,17 @@ export default function App() {
     }
   };
 
+  const handleStartNewCohort = () => {
+    if (!window.confirm('현재 차수 데이터를 보관한 뒤 새 차수로 시작하시겠습니까? 기존 데이터는 백업 파일로 남아 있습니다.')) return;
+    const nextSessionId = `cohort-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6)}`;
+    Object.keys(localStorage).filter((key) => key.startsWith('mobile-draft-')).forEach((key) => localStorage.removeItem(key));
+    setSessionId(nextSessionId);
+    localStorage.setItem('semiconductor_active_session_id', nextSessionId);
+    setTeams(Array.from({ length: 32 }, (_, i) => createDefaultTeam(i + 1)));
+    setSubmissions([]);
+    setVotedIds(new Set());
+  };
+
   // Instructor: Add new CSV Dataset
   const handleAddDataset = async (newDatasetData: Omit<SampleDataset, 'id' | 'uploadedAt'>) => {
     const localId = `dataset-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -744,8 +755,11 @@ export default function App() {
     const backupData = {
       exportedAt: new Date().toISOString(),
       trainingTitle: sessionConfig.trainingTitle,
+      sessionId,
+      sessionConfig,
       teams,
       submissions,
+      datasets,
     };
     const blob = new Blob([JSON.stringify(backupData, null, 2)], {
       type: 'application/json',
@@ -826,6 +840,7 @@ export default function App() {
           isVotingOpen={sessionConfig.isVotingOpen}
           onToggleVoting={handleToggleVoting}
           onResetData={handleResetData}
+          onStartNewCohort={handleStartNewCohort}
           onStartTeamPresentation={handleStartTeamPresentation}
           onExportJson={handleExportJson}
           onImportJson={handleImportJson}
