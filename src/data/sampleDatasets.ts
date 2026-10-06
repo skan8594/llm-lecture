@@ -427,6 +427,141 @@ function generateLotQtimeCsv(): string {
   return rows.join('\n');
 }
 
+// Fixed seeds keep every student's CSV identical while scattering the inspection cases.
+function seededRandom(seed: number): () => number {
+  let state = seed;
+  return () => ((state = (Math.imul(state, 1664525) + 1013904223) >>> 0) / 4294967296);
+}
+
+function injectTrainingIssues(
+  rows: string[][],
+  seed: number,
+  changes: Array<(row: string[]) => void>,
+  eligible: (row: string[]) => boolean = () => true
+) {
+  const random = seededRandom(seed);
+  const candidates = rows.map((_, index) => index).filter(index => eligible(rows[index]));
+  if (candidates.length < changes.length) throw new Error('Not enough training rows for issue injection');
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+  changes.forEach((change, index) => change(rows[candidates[index]]));
+}
+
+const trainingTime = (minutes: number) =>
+  new Date(Date.UTC(2026, 8, 14, 8) + minutes * 60000).toISOString().slice(0, 16).replace('T', ' ');
+const shiftTrainingTime = (timestamp: string, minutes: number) =>
+  new Date(Date.parse(timestamp.replace(' ', 'T') + 'Z') + minutes * 60000).toISOString().slice(0, 16).replace('T', ' ');
+
+// 9. Lot-level process progress: 18 lots x 4 steps, including legitimate work in progress.
+function generateProcessProgressCsv(): string {
+  const header = 'lot_id,step_seq,process_step,planned_start_at,planned_end_at,actual_start_at,actual_end_at,qty_in,qty_out,status';
+  const steps = ['CLEAN', 'PHOTO', 'ETCH', 'METROLOGY'];
+  const durations = [55, 90, 75, 45];
+  const random = seededRandom(20260914);
+  const rows: string[][] = [];
+
+  for (let lot = 1; lot <= 18; lot++) {
+    let previousEnd = 0;
+    steps.forEach((step, index) => {
+      const plannedStart = (lot - 1) * 110 + index * 150;
+      const actualStart = Math.max(plannedStart + Math.floor(random() * 46), previousEnd + (index ? 12 : 0));
+      const actualEnd = actualStart + durations[index] + Math.floor(random() * 26);
+      previousEnd = actualEnd;
+      const inProgress = index === 3 && lot % 6 === 0;
+      rows.push([
+        `LOT-M${String(lot).padStart(3, '0')}`, String(index + 1), step,
+        trainingTime(plannedStart), trainingTime(plannedStart + durations[index]),
+        trainingTime(actualStart), inProgress ? '' : trainingTime(actualEnd),
+        '25', inProgress ? '' : String(25 - Math.floor(random() * 3)),
+        inProgress ? 'IN_PROGRESS' : 'COMPLETED',
+      ]);
+    });
+  }
+
+  injectTrainingIssues(rows, 1401, [
+    row => { row[5] = ''; },
+    row => { row[6] = ''; },
+    row => { row[5] = '2026-09-XX 09:00'; },
+    row => { row[6] = shiftTrainingTime(row[5], -10); },
+    row => { row[8] = '30'; },
+    row => { row[9] = 'COMPLETE?'; },
+  ], row => row[9] === 'COMPLETED');
+  return [header, ...rows.map(row => row.join(','))].join('\n');
+}
+
+// 10. FOUP movement: 16 lots x 4 handoffs across manufacturing areas.
+function generateLogisticsMovementCsv(): string {
+  const header = 'move_id,lot_id,foup_id,from_area,to_area,carrier_id,planned_pickup_at,actual_pickup_at,planned_arrival_at,actual_arrival_at,move_status';
+  const route = [['STOCKER_A', 'CLEAN'], ['CLEAN', 'PHOTO'], ['PHOTO', 'ETCH'], ['ETCH', 'STOCKER_B']];
+  const random = seededRandom(20260915);
+  const rows: string[][] = [];
+
+  for (let lot = 1; lot <= 16; lot++) {
+    route.forEach(([from, to], hop) => {
+      const plannedPickup = (lot - 1) * 100 + hop * 95;
+      const actualPickup = plannedPickup + Math.floor(random() * 24);
+      const plannedTravel = 25 + hop * 5;
+      const actualArrival = actualPickup + plannedTravel + Math.floor(random() * 22);
+      rows.push([
+        `MOVE-${String(rows.length + 1).padStart(4, '0')}`,
+        `LOT-L${String(lot).padStart(3, '0')}`,
+        `FOUP-${String(lot).padStart(3, '0')}`,
+        from, to, `AMHS-${String(lot % 4 + 1).padStart(2, '0')}`,
+        trainingTime(plannedPickup), trainingTime(actualPickup),
+        trainingTime(plannedPickup + plannedTravel), trainingTime(actualArrival), 'COMPLETED',
+      ]);
+    });
+  }
+
+  injectTrainingIssues(rows, 1502, [
+    row => { row[2] = ''; },
+    row => { row[5] = ''; },
+    row => { row[9] = ''; },
+    row => { row[9] = shiftTrainingTime(row[7], -10); },
+    row => { row[0] = 'MOVE-0001'; },
+    row => { row[4] = 'UNKNOWN_AREA'; },
+  ], row => row[0] !== 'MOVE-0001');
+  return [header, ...rows.map(row => row.join(','))].join('\n');
+}
+
+// 11. Equipment shift output: 8 days x 3 shifts x 3 process areas.
+function generateProductionTrendCsv(): string {
+  const header = 'work_date,shift,equipment_id,process_step,target_qty,input_qty,completed_qty,good_qty,scrap_qty,hold_qty,downtime_minutes,record_status';
+  const equipment = [['ETCH-01', 'ETCH'], ['PHOTO-02', 'PHOTO'], ['CMP-03', 'CMP']];
+  const shifts = ['DAY', 'SWING', 'NIGHT'];
+  const random = seededRandom(20260916);
+  const rows: string[][] = [];
+
+  for (let day = 0; day < 8; day++) {
+    shifts.forEach(shift => {
+      equipment.forEach(([tool, step], toolIndex) => {
+        const target = 120;
+        const input = 125;
+        const completed = target - (toolIndex === 0 ? day * 4 : 0) - Math.floor(random() * 7);
+        const scrap = 2 + Math.floor(random() * 4);
+        const downtime = toolIndex === 0 ? 5 + day * 8 + Math.floor(random() * 5) : 5 + Math.floor(random() * 13);
+        rows.push([
+          `2026-09-${String(14 + day).padStart(2, '0')}`, shift, tool, step,
+          String(target), String(input), String(completed), String(completed - scrap),
+          String(scrap), String(input - completed), String(downtime), 'FINAL',
+        ]);
+      });
+    });
+  }
+
+  injectTrainingIssues(rows, 1603, [
+    row => { row[6] = ''; },
+    row => { row[10] = ''; },
+    row => { row[8] = '-2'; },
+    row => { row[7] = String(Number(row[6]) + 4); },
+    row => { row[9] = '0'; },
+    row => { row[1] = 'NITE'; },
+  ]);
+  return [header, ...rows.map(row => row.join(','))].join('\n');
+}
+
 export function getInitialDatasets(): SampleDataset[] {
   const waferCsv = generateWafer300mmDefectsCsv();
   const overlayCsv = generateLithoOverlayCsv();
@@ -436,6 +571,9 @@ export function getInitialDatasets(): SampleDataset[] {
   const fdcCsv = generateEtchFdcCsv();
   const cmpCsv = generateCmpMetrologyCsv();
   const qtimeCsv = generateLotQtimeCsv();
+  const processCsv = generateProcessProgressCsv();
+  const movementCsv = generateLogisticsMovementCsv();
+  const productionCsv = generateProductionTrendCsv();
 
   const stats1 = calculateCsvStats(waferCsv);
   const stats2 = calculateCsvStats(overlayCsv);
@@ -534,6 +672,36 @@ export function getInitialDatasets(): SampleDataset[] {
       rowCount: stats8.rowCount,
       uploadedAt: Date.now() - 900000,
       uploadedBy: '강사 (FAB 제조물류팀)',
+    },
+    {
+      id: 'dataset-manufacturing-process-progress',
+      title: '제조 공정 진행 지연 추적',
+      fileName: 'manufacturing_process_progress.csv',
+      description: '교육용 가상 데이터 18개 로트×4공정(72행). 계획/실제 시작·종료를 비교해 지연 로트와 공정을 찾으세요. COMPLETED의 시각 누락·역전, 수량 역전, 상태 오류를 분리하고 IN_PROGRESS의 미종료는 정상적인 미완료로 구분하세요.',
+      csvContent: processCsv,
+      ...calculateCsvStats(processCsv),
+      uploadedAt: Date.now() - 600000,
+      uploadedBy: '강사 (FAB 제조운영팀)',
+    },
+    {
+      id: 'dataset-manufacturing-logistics-movement',
+      title: 'FOUP 물류 이동 및 인계 지연',
+      fileName: 'manufacturing_logistics_movement.csv',
+      description: '교육용 가상 데이터 16개 로트×4회 이동(64행). 계획/실제 픽업·도착을 비교해 지연 구간을 찾고 FOUP별 이동 경로를 재구성하세요. 시간 역전·누락·중복 이동 ID·알 수 없는 구역을 별도 오류 목록으로 제출하세요.',
+      csvContent: movementCsv,
+      ...calculateCsvStats(movementCsv),
+      uploadedAt: Date.now() - 540000,
+      uploadedBy: '강사 (FAB 제조물류팀)',
+    },
+    {
+      id: 'dataset-manufacturing-production-trend',
+      title: '설비·교대조별 공정 실적 변화 추적',
+      fileName: 'manufacturing_production_trend.csv',
+      description: '교육용 가상 데이터 8일×3교대×3설비(72행). 설비별 일자·교대조 실적과 가동 중단 시간을 비교하세요. 투입=완료+보류, 완료=양품+폐기 조건을 검증하고 결측·음수·교대조 코드 오류를 표시한 뒤 변화 원인을 추측하지 마세요.',
+      csvContent: productionCsv,
+      ...calculateCsvStats(productionCsv),
+      uploadedAt: Date.now() - 480000,
+      uploadedBy: '강사 (FAB 제조운영팀)',
     },
   ];
 }

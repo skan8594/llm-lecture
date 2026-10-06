@@ -21,6 +21,8 @@ import {
   saveSubmissionToFirebase,
   updateTeamInFirebase,
   saveDatasetToFirebase,
+  seedManufacturingDatasetsIfNeeded,
+  deleteDatasetFromFirebase,
   recordVoteInFirebase,
   updateSessionConfigInFirebase,
   seedSessionIfEmpty,
@@ -177,11 +179,21 @@ export default function App() {
   // Semiconductor Sample Datasets state with LocalStorage persistence & server sync
   const [datasets, setDatasets] = useState<SampleDataset[]>(() => {
     const defaults = getInitialDatasets();
+    const cachedV3 = localStorage.getItem('semiconductor_mfg_v3_datasets');
+    if (cachedV3) {
+      try {
+        const parsed = JSON.parse(cachedV3);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
     const cachedV2 = localStorage.getItem('semiconductor_mfg_v2_datasets');
     if (cachedV2) {
       try {
         const parsed = JSON.parse(cachedV2);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existingIds = new Set(parsed.map((item: SampleDataset) => item.id));
+          return [...parsed, ...defaults.filter(item => item.id.startsWith('dataset-manufacturing-') && !existingIds.has(item.id))];
+        }
       } catch (e) {}
     }
     const cachedV1 = localStorage.getItem('semiconductor_mfg_v1_datasets');
@@ -288,6 +300,11 @@ export default function App() {
           }
         });
 
+        seedManufacturingDatasetsIfNeeded(
+          sessionId,
+          getInitialDatasets().filter(item => item.id.startsWith('dataset-manufacturing-'))
+        ).catch((err) => console.warn('Manufacturing dataset update notice:', err));
+
         unsubConfig = subscribeToSessionConfig(sessionId, (remoteConfig) => {
           if (remoteConfig) {
             setSessionConfig(remoteConfig);
@@ -321,7 +338,7 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('semiconductor_mfg_v2_datasets', JSON.stringify(datasets));
+      localStorage.setItem('semiconductor_mfg_v3_datasets', JSON.stringify(datasets));
     } catch (e) {}
   }, [datasets]);
 
@@ -734,6 +751,7 @@ export default function App() {
   // Instructor: Delete Dataset
   const handleDeleteDataset = async (id: string) => {
     setDatasets((prev) => prev.filter((d) => d.id !== id));
+    deleteDatasetFromFirebase(sessionId, id).catch((err) => console.warn('Dataset Firebase delete notice:', err));
     try {
       await fetch(`/api/datasets/${id}`, { method: 'DELETE' });
     } catch (err) {

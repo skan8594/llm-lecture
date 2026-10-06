@@ -9,6 +9,7 @@ import {
   doc,
   collection,
   setDoc,
+  deleteDoc,
   updateDoc,
   getDocs,
   getDocFromServer,
@@ -237,6 +238,30 @@ export async function saveDatasetToFirebase(
     handleFirestoreError(error, OperationType.WRITE, `${path}/${dataset.id}`);
     throw error;
   }
+}
+
+export async function deleteDatasetFromFirebase(sessionId: string, datasetId: string) {
+  const path = `sessions/${sessionId}/datasets/${datasetId}`;
+  try {
+    await deleteDoc(doc(db, path));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+    throw error;
+  }
+}
+
+// Add the new teaching pack once to existing cohorts without replacing their datasets.
+export async function seedManufacturingDatasetsIfNeeded(sessionId: string, datasets: SampleDataset[]) {
+  const sessionPath = `sessions/${sessionId}`;
+  const datasetPath = `${sessionPath}/datasets`;
+  const sessionSnapshot = await getDocFromServer(doc(db, sessionPath));
+  if (sessionSnapshot.data()?.manufacturingDatasetPackVersion === 1) return;
+
+  const existing = new Set((await getDocs(collection(db, datasetPath))).docs.map(item => item.id));
+  for (const dataset of datasets) {
+    if (!existing.has(dataset.id)) await setDoc(doc(db, datasetPath, dataset.id), dataset);
+  }
+  await setDoc(doc(db, sessionPath), { manufacturingDatasetPackVersion: 1 }, { merge: true });
 }
 
 export async function recordVoteInFirebase(
