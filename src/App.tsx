@@ -10,7 +10,7 @@ import { ParticipantTeamView } from './components/ParticipantTeamView';
 import { SubmissionModal } from './components/SubmissionModal';
 import { TeamPresentationStage } from './components/TeamPresentationStage';
 import { INITIAL_15_TEAMS, INITIAL_SUBMISSIONS, createDefaultTeam, isTeamSubmitted } from './data/teamData';
-import { getInitialDatasets } from './data/sampleDatasets';
+import { getInitialDatasets, upgradeShippedManufacturingDataset } from './data/sampleDatasets';
 import { Users, Laptop, ArrowRight, ExternalLink, Sparkles, Database } from 'lucide-react';
 import {
   DEFAULT_SESSION_ID,
@@ -183,7 +183,9 @@ export default function App() {
     if (cachedV3) {
       try {
         const parsed = JSON.parse(cachedV3);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((item: SampleDataset) => upgradeShippedManufacturingDataset(item, defaults));
+        }
       } catch (e) {}
     }
     const cachedV2 = localStorage.getItem('semiconductor_mfg_v2_datasets');
@@ -192,7 +194,10 @@ export default function App() {
         const parsed = JSON.parse(cachedV2);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const existingIds = new Set(parsed.map((item: SampleDataset) => item.id));
-          return [...parsed, ...defaults.filter(item => item.id.startsWith('dataset-manufacturing-') && !existingIds.has(item.id))];
+          return [
+            ...parsed.map((item: SampleDataset) => upgradeShippedManufacturingDataset(item, defaults)),
+            ...defaults.filter(item => item.id.startsWith('dataset-manufacturing-') && !existingIds.has(item.id)),
+          ];
         }
       } catch (e) {}
     }
@@ -263,6 +268,7 @@ export default function App() {
         );
       })
       .then(() => {
+        const manufacturingDefaults = getInitialDatasets().filter(item => item.id.startsWith('dataset-manufacturing-'));
         unsubSubs = subscribeToSubmissions(sessionId, (remoteSubs) => {
           if (remoteSubs && remoteSubs.length > 0) {
             setSubmissions(remoteSubs);
@@ -296,14 +302,12 @@ export default function App() {
 
         unsubDatasets = subscribeToDatasets(sessionId, (remoteDatasets) => {
           if (remoteDatasets && remoteDatasets.length > 0) {
-            setDatasets(remoteDatasets);
+            setDatasets(remoteDatasets.map(item => upgradeShippedManufacturingDataset(item, manufacturingDefaults)));
           }
         });
 
-        seedManufacturingDatasetsIfNeeded(
-          sessionId,
-          getInitialDatasets().filter(item => item.id.startsWith('dataset-manufacturing-'))
-        ).catch((err) => console.warn('Manufacturing dataset update notice:', err));
+        seedManufacturingDatasetsIfNeeded(sessionId, manufacturingDefaults)
+          .catch((err) => console.warn('Manufacturing dataset update notice:', err));
 
         unsubConfig = subscribeToSessionConfig(sessionId, (remoteConfig) => {
           if (remoteConfig) {
@@ -348,7 +352,8 @@ export default function App() {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.datasets && Array.isArray(data.datasets) && data.datasets.length > 0) {
-          setDatasets(data.datasets);
+          const current = getInitialDatasets().filter(item => item.id.startsWith('dataset-manufacturing-'));
+          setDatasets(data.datasets.map((item: SampleDataset) => upgradeShippedManufacturingDataset(item, current)));
         }
       })
       .catch(() => {});

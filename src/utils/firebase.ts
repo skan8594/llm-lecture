@@ -24,6 +24,7 @@ import {
   SampleDataset,
   TrainingSessionConfig,
 } from '../types';
+import { upgradeShippedManufacturingDataset } from '../data/sampleDatasets';
 
 export const DEFAULT_SESSION_ID = '2026onboarding';
 
@@ -250,18 +251,25 @@ export async function deleteDatasetFromFirebase(sessionId: string, datasetId: st
   }
 }
 
-// Add the new teaching pack once to existing cohorts without replacing their datasets.
+// Upgrade shipped examples once, preserving instructor edits and deleted pack entries.
 export async function seedManufacturingDatasetsIfNeeded(sessionId: string, datasets: SampleDataset[]) {
   const sessionPath = `sessions/${sessionId}`;
   const datasetPath = `${sessionPath}/datasets`;
   const sessionSnapshot = await getDocFromServer(doc(db, sessionPath));
-  if (sessionSnapshot.data()?.manufacturingDatasetPackVersion === 1) return;
+  const version = Number(sessionSnapshot.data()?.manufacturingDatasetPackVersion || 0);
+  if (version >= 2) return;
 
-  const existing = new Set((await getDocs(collection(db, datasetPath))).docs.map(item => item.id));
+  const existing = new Map((await getDocs(collection(db, datasetPath))).docs.map(item => [item.id, item.data() as SampleDataset]));
   for (const dataset of datasets) {
-    if (!existing.has(dataset.id)) await setDoc(doc(db, datasetPath, dataset.id), dataset);
+    const stored = existing.get(dataset.id);
+    if (stored) {
+      const upgraded = upgradeShippedManufacturingDataset(stored, datasets);
+      if (upgraded !== stored) await setDoc(doc(db, datasetPath, dataset.id), upgraded);
+    } else if (version === 0) {
+      await setDoc(doc(db, datasetPath, dataset.id), dataset);
+    }
   }
-  await setDoc(doc(db, sessionPath), { manufacturingDatasetPackVersion: 1 }, { merge: true });
+  await setDoc(doc(db, sessionPath), { manufacturingDatasetPackVersion: 2 }, { merge: true });
 }
 
 export async function recordVoteInFirebase(
