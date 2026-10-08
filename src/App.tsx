@@ -888,13 +888,13 @@ export default function App() {
                 </div>
                 <button
                   onClick={() => setIsFirebaseModalOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-all"
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-bold transition-all ${isFirebaseConnected ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-rose-500/10 border-rose-500/30 text-rose-300'}`}
                 >
                   <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    {isFirebaseConnected && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
+                    <span className={`relative inline-flex rounded-full h-2 w-2 ${isFirebaseConnected ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
                   </span>
-                  <span className="font-mono">Firebase: {sessionId}</span>
+                  <span className="font-mono">{isFirebaseConnected ? `Firebase: ${sessionId}` : 'Firebase 미연결'}</span>
                 </button>
               </div>
               <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">

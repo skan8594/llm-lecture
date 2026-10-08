@@ -96,15 +96,15 @@ export const FirebaseStatusModal: React.FC<FirebaseStatusModalProps> = ({
           <div className="flex items-center justify-between p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl">
             <div className="flex items-center gap-2">
               <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                {isConnected && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
+                <span className={`relative inline-flex rounded-full h-3 w-3 ${isConnected ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
               </span>
               <span className="text-sm font-bold text-white">
-                {isConnected ? 'Firebase 실시간 동기화 활성' : 'Firebase 연결 대기'}
+                {isConnected ? 'Firebase 실시간 동기화 활성' : 'Firebase 미연결 · 저장 및 실시간 조회 불가'}
               </span>
             </div>
-            <span className="px-2.5 py-1 rounded-full text-[11px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              Online
+            <span className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-bold border ${isConnected ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/30'}`}>
+              {isConnected ? 'Online' : 'Offline'}
             </span>
           </div>
 
