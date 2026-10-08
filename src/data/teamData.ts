@@ -48,6 +48,7 @@ export function isTeamSubmitted(team: TeamActivity, submissions?: CodeSubmission
     }
     if (team.slogan && team.slogan.trim().length > 0) return true;
     if (team.problemStatement && team.problemStatement.trim().length > 0) return true;
+    if (team.productivityImpact && team.productivityImpact.trim().length > 0) return true;
     if (team.code && team.code.trim().length > 0) return true;
   }
 

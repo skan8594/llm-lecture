@@ -41,7 +41,7 @@ interface PresenterDashboardProps {
   votedIds: Set<string>;
   isVotingOpen: boolean;
   onToggleVoting: () => void;
-  onResetData: () => void;
+  onResetData: () => Promise<void>;
   onStartNewCohort?: () => void;
   onStartTeamPresentation: (teamIndex: number) => void;
   onExportJson?: () => void;
@@ -200,6 +200,13 @@ export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
                 <span>새 차수 시작</span>
               </button>
             )}
+            <button
+              onClick={onResetData}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold text-rose-300 bg-rose-950/50 hover:bg-rose-900 border border-rose-800 transition-colors"
+              title="현재 차수의 수강생 기록을 백업하고 Firebase에서 초기화 (데이터셋 유지)"
+            >
+              수강생 기록 초기화
+            </button>
           </div>
         </div>
       </header>

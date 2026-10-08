@@ -41,12 +41,12 @@ interface ParticipantTeamViewProps {
   teamNumber: number;
   submissions: CodeSubmission[];
   datasets?: SampleDataset[];
-  onSubmit: (submission: Omit<CodeSubmission, 'id' | 'votes' | 'createdAt'>) => void;
+  onSubmit: (submission: Partial<CodeSubmission>) => Promise<boolean>;
   onVote: (submissionId: string) => void;
   votedIds: Set<string>;
   isVotingOpen: boolean;
   onSelectSubmission?: (sub: CodeSubmission) => void;
-  onUpdateTeamInfo?: (updatedFields: Partial<TeamActivity>) => void;
+  onUpdateTeamInfo?: (updatedFields: Partial<TeamActivity>) => Promise<boolean>;
   firebaseConnected?: boolean;
   sessionId?: string;
   onOpenFirebaseModal?: () => void;
@@ -91,18 +91,22 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
       : ''
   );
   const [isTeamInfoSaved, setIsTeamInfoSaved] = useState(false);
+  const [isSavingTeamInfo, setIsSavingTeamInfo] = useState(false);
+  const [teamInfoError, setTeamInfoError] = useState('');
 
   // Sync state if team prop updates
   useEffect(() => {
-    if (team.teamName) setTeamName(team.teamName);
-    if (team.slogan) setSlogan(team.slogan);
-    if (team.category) setCategory(team.category);
-    if (team.problemStatement) setProblemStatement(team.problemStatement);
-    if (team.productivityImpact) setProductivityImpact(team.productivityImpact);
-  }, [team]);
+    setTeamName(team.teamName || '');
+    setSlogan(team.slogan || '');
+    setCategory(team.category || 'yield_defect');
+    setProblemStatement(team.problemStatement || '');
+    setProductivityImpact(team.productivityImpact || '');
+  }, [team.id, team.teamName, team.slogan, team.category, team.problemStatement, team.productivityImpact]);
 
-  const handleSaveTeamInfo = (e: React.FormEvent) => {
+  const handleSaveTeamInfo = async (e: React.FormEvent) => {
     e.preventDefault();
+    setTeamInfoError('');
+    setIsSavingTeamInfo(true);
     const finalTeamName = teamName.trim();
     const updatedFields: Partial<TeamActivity> = {
       teamName: finalTeamName,
@@ -110,15 +114,21 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
       category,
       problemStatement: problemStatement.trim(),
       productivityImpact: productivityImpact.trim(),
-      isRegistered: !!(finalTeamName || slogan.trim() || problemStatement.trim()),
+      isRegistered: !!(finalTeamName || slogan.trim() || problemStatement.trim() || productivityImpact.trim()),
     };
 
-    if (onUpdateTeamInfo) {
-      onUpdateTeamInfo(updatedFields);
+    try {
+      if (!onUpdateTeamInfo || !await onUpdateTeamInfo(updatedFields)) {
+        setTeamInfoError('Firebase에 저장하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요.');
+        return;
+      }
+      setIsTeamInfoSaved(true);
+      setTimeout(() => setIsTeamInfoSaved(false), 2500);
+    } catch {
+      setTeamInfoError('Firebase에 저장하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요.');
+    } finally {
+      setIsSavingTeamInfo(false);
     }
-
-    setIsTeamInfoSaved(true);
-    setTimeout(() => setIsTeamInfoSaved(false), 2500);
   };
 
   // ==================== TAB 2: CODE SUBMISSION STATE ====================
@@ -135,6 +145,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
   const [sampleInput, setSampleInput] = useState(myTeamSubmission?.sampleInput || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submissionError, setSubmissionError] = useState('');
   const [showRunnerPreview, setShowRunnerPreview] = useState(false);
   const draftKey = 'mobile-draft-' + sessionId + '-' + teamNumber;
   const [draftReady, setDraftReady] = useState(false);
@@ -223,8 +234,9 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
     if (!title.trim() || !code.trim()) return;
 
     setIsSubmitting(true);
+    setSubmissionError('');
     try {
-      onSubmit({
+      const saved = await onSubmit({
         title: title.trim(),
         team: `제 ${teamNumber} 조`,
         authorName: team.teamName || `제 ${teamNumber} 조`,
@@ -237,11 +249,15 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
         productivityImpact: productivityImpact.trim() || '효과 미측정',
         category,
       });
-
+      if (!saved) {
+        setSubmissionError('Firebase에 제출하지 못했습니다. 입력 내용은 이 기기에 초안으로 남아 있습니다. 연결 상태를 확인하고 다시 시도하세요.');
+        return;
+      }
       setSubmitSuccess(true);
       setTimeout(() => setSubmitSuccess(false), 3000);
     } catch (err) {
       console.error(err);
+      setSubmissionError('Firebase에 제출하지 못했습니다. 다시 시도하세요.');
     } finally {
       setIsSubmitting(false);
     }
@@ -580,6 +596,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
                   <span>저장 완료!</span>
                 </div>
               )}
+              {teamInfoError && <div role="alert" className="text-xs text-rose-300">{teamInfoError}</div>}
             </div>
 
             <form onSubmit={handleSaveTeamInfo} className="space-y-4">
@@ -670,10 +687,11 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
               <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
                 <button
                   type="submit"
+                  disabled={isSavingTeamInfo}
                   className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/30 active:scale-95"
                 >
                   <Save className="w-4 h-4" />
-                  <span>팀 정보 저장하기</span>
+                  <span>{isSavingTeamInfo ? 'Firebase 저장 중...' : '팀 정보 저장하기'}</span>
                 </button>
 
                 <button
@@ -901,6 +919,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
                       제출 완료!
                     </span>
                   )}
+                  {submissionError && <span role="alert" className="text-xs text-rose-300">{submissionError}</span>}
 
                   <button
                     type="submit"
@@ -912,7 +931,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
                     ) : (
                       <Upload className="w-4 h-4" />
                     )}
-                    <span>{myTeamSubmission ? '과제 최종 업데이트' : '대표 과제 최종 제출'}</span>
+                    <span>{isSubmitting ? 'Firebase 저장 중...' : myTeamSubmission ? '과제 최종 업데이트' : '대표 과제 최종 제출'}</span>
                   </button>
                 </div>
               </div>

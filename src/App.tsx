@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback, useId, useRef } from 'react';
+import React, { useState, useEffect, useId, useRef } from 'react';
 import { CodeSubmission, TrainingSessionConfig, TeamActivity, ProductivityCategory, SampleDataset } from './types';
 import { PresenterDashboard } from './components/PresenterDashboard';
 import { ParticipantTeamView } from './components/ParticipantTeamView';
@@ -27,8 +27,10 @@ import {
   updateSessionConfigInFirebase,
   seedSessionIfEmpty,
   testConnection,
+  resetStudentDataInFirebase,
 } from './utils/firebase';
 import { FirebaseStatusModal } from './components/FirebaseStatusModal';
+import { getTeamNumber } from './utils/teamUtils';
 
 // Helper to parse team from URL:
 // ?team=0 -> Presenter (강사용)
@@ -259,18 +261,27 @@ export default function App() {
 
   // Active Firebase Session ID (Defaults to 2026onboarding)
   const [sessionId, setSessionId] = useState<string>(activeSessionId);
-  const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
+  const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
   const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState<boolean>(false);
+  const [syncRevision, setSyncRevision] = useState(0);
 
   // Realtime Firebase Firestore synchronization for 2026onboarding
   useEffect(() => {
+    let active = true;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
     let unsubSubs: (() => void) | undefined;
     let unsubTeams: (() => void) | undefined;
     let unsubDatasets: (() => void) | undefined;
     let unsubConfig: (() => void) | undefined;
+    const retryAfterError = () => {
+      if (!active) return;
+      setIsFirebaseConnected(false);
+      if (!retryTimer) retryTimer = setTimeout(() => setSyncRevision(value => value + 1), 60000);
+    };
 
     testConnection()
       .then((connected) => {
+        if (!active) return;
         setIsFirebaseConnected(connected);
         return seedSessionIfEmpty(
           sessionId,
@@ -281,12 +292,13 @@ export default function App() {
         );
       })
       .then(() => {
+        if (!active) return;
         const manufacturingDefaults = getInitialDatasets().filter(item => item.id.startsWith('dataset-manufacturing-'));
         unsubSubs = subscribeToSubmissions(sessionId, (remoteSubs) => {
           submissionsRef.current = remoteSubs;
           setSubmissions(remoteSubs);
           setSelectedSubmission(prev => prev ? remoteSubs.find(s => s.id === prev.id) || null : null);
-        });
+        }, retryAfterError);
 
         unsubTeams = subscribeToTeams(sessionId, (remoteTeams) => {
           if (remoteTeams && remoteTeams.length > 0) {
@@ -306,14 +318,16 @@ export default function App() {
             } else {
               setTeams(sanitized);
             }
+          } else {
+            setTeams(INITIAL_15_TEAMS);
           }
-        });
+        }, retryAfterError);
 
         unsubDatasets = subscribeToDatasets(sessionId, (remoteDatasets) => {
           if (remoteDatasets && remoteDatasets.length > 0) {
             setDatasets(remoteDatasets.map(item => upgradeShippedManufacturingDataset(item, manufacturingDefaults)));
           }
-        });
+        }, retryAfterError);
 
         seedManufacturingDatasetsIfNeeded(sessionId, manufacturingDefaults)
           .catch((err) => console.warn('Manufacturing dataset update notice:', err));
@@ -322,19 +336,22 @@ export default function App() {
           if (remoteConfig) {
             setSessionConfig(remoteConfig);
           }
-        });
+        }, retryAfterError);
       })
       .catch((err) => {
         console.warn('Firebase sync notice:', err);
+        retryAfterError();
       });
 
     return () => {
+      active = false;
+      if (retryTimer) clearTimeout(retryTimer);
       if (unsubSubs) unsubSubs();
       if (unsubTeams) unsubTeams();
       if (unsubDatasets) unsubDatasets();
       if (unsubConfig) unsubConfig();
     };
-  }, [sessionId]);
+  }, [sessionId, syncRevision]);
 
   // Persist teams and submissions to localStorage for GitHub Pages compatibility
   useEffect(() => {
@@ -396,44 +413,6 @@ export default function App() {
       setVotedIds(new Set());
     }
   }, [sessionId]);
-
-  // Fetch submissions and session status from server (if server exists, else gracefully fallback)
-  const fetchData = useCallback(async () => {
-    try {
-      const [subsRes, sessionRes] = await Promise.all([
-        fetch('/api/submissions').catch(() => null),
-        fetch('/api/session').catch(() => null),
-      ]);
-
-      if (subsRes && subsRes.ok) {
-        const subsData = await subsRes.json();
-        if (subsData.submissions && Array.isArray(subsData.submissions)) {
-          setSubmissions(subsData.submissions);
-
-          setSelectedSubmission((prev) => {
-            if (!prev) return null;
-            return subsData.submissions.find((s: CodeSubmission) => s.id === prev.id) || prev;
-          });
-        }
-      }
-
-      if (sessionRes && sessionRes.ok) {
-        const sessData = await sessionRes.json();
-        if (sessData.config) {
-          setSessionConfig(sessData.config);
-        }
-      }
-    } catch (e) {
-      // In GitHub Pages (static), API fetch is not available, relying on local state
-    }
-  }, []);
-
-  // Polling every 3 seconds (graceful fallback on static hosting)
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 3000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
 
   // Handle Voting with optional reaction (Strict: 1 vote per person per item)
   const handleVote = async (id: string, reactionType?: string) => {
@@ -596,8 +575,11 @@ export default function App() {
 
   // Handle New Submission from participant
   const handleSubmitSubmission = async (newSubData: Partial<CodeSubmission>): Promise<boolean> => {
+    const teamNumber = getTeamNumber(newSubData.team);
+    const existing = submissionsRef.current.find(s => getTeamNumber(s.team) === teamNumber);
     const newSubmission: CodeSubmission = {
-      id: 'sub-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6),
+      id: existing?.id || 'sub-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6),
+      ...existing,
       title: newSubData.title || '신규 반도체 개선 과제',
       category: (newSubData.category as ProductivityCategory) || 'yield_defect',
       department: newSubData.department || '공정기술팀',
@@ -610,91 +592,56 @@ export default function App() {
       productivityImpact: newSubData.productivityImpact || '수율 개선 및 분석 시간 단축',
       sampleInput: newSubData.sampleInput || '',
       submittedAt: Date.now(),
-      votes: 0,
-      reactions: { productivity: 0, prompt: 0, practical: 0, ui: 0, fast: 0, creative: 0, wellPrompted: 0 },
+      votes: existing?.votes || 0,
+      reactions: existing?.reactions || { productivity: 0, prompt: 0, practical: 0, ui: 0, fast: 0, creative: 0, wellPrompted: 0 },
     };
-
-    // Save to Firestore
-    saveSubmissionToFirebase(sessionId, newSubmission).catch(() => {});
-
-    setSubmissions((prev) => {
-      const existingIdx = prev.findIndex((s) => s.team === newSubmission.team);
-      if (existingIdx >= 0) {
-        const updated = [...prev];
-        updated[existingIdx] = {
-          ...updated[existingIdx],
-          ...newSubmission,
-          id: updated[existingIdx].id,
-          votes: updated[existingIdx].votes,
-          reactions: updated[existingIdx].reactions,
-        };
-        return updated;
-      }
-      return [newSubmission, ...prev];
-    });
-
-    setTeams((prev) =>
-      prev.map((t) => {
-        if (`${t.teamNumber}조` === newSubmission.team || String(t.teamNumber) === newSubmission.team) {
-          const updated: TeamActivity = {
-            ...t,
-            code: newSubmission.code,
-            language: newSubmission.language,
-            productivityImpact: newSubmission.productivityImpact,
-            llmPromptStrategy: newSubmission.promptUsed,
-            category: newSubmission.category || t.category,
-            representativeSubmissionId: newSubmission.id,
-            isRegistered: true,
-            submittedAt: t.submittedAt || Date.now(),
-          };
-          updateTeamInFirebase(sessionId, updated).catch(() => {});
-          return updated;
-        }
-        return t;
-      })
-    );
-
-    // Try API call if backend server exists
+    const currentTeam = teams.find(t => t.teamNumber === teamNumber) || createDefaultTeam(teamNumber);
+    const updatedTeam: TeamActivity = {
+      ...currentTeam,
+      code: newSubmission.code,
+      language: newSubmission.language,
+      productivityImpact: newSubmission.productivityImpact,
+      llmPromptStrategy: newSubmission.promptUsed,
+      category: newSubmission.category || currentTeam.category,
+      representativeSubmissionId: newSubmission.id,
+      isRegistered: true,
+      submittedAt: currentTeam.submittedAt || Date.now(),
+    };
     try {
-      await fetch('/api/submissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSubData),
-      });
-    } catch (e) {
-      // GitHub Pages static mode: local state updated
+      await saveSubmissionToFirebase(sessionId, newSubmission, updatedTeam);
+      setSubmissions(prev => [newSubmission, ...prev.filter(s => s.id !== newSubmission.id)]);
+      setTeams(prev => prev.some(t => t.teamNumber === teamNumber)
+        ? prev.map(t => t.teamNumber === teamNumber ? updatedTeam : t)
+        : [...prev, updatedTeam]);
+      setIsFirebaseConnected(true);
+      return true;
+    } catch (error) {
+      console.warn('Submission save failed:', error);
+      setIsFirebaseConnected(false);
+      return false;
     }
-    return true;
   };
 
   // Update Team Planning Info (from Participant Team View Tab 1)
-  const handleUpdateTeamInfo = (teamNum: number, updatedFields: Partial<TeamActivity>) => {
-    setTeams((prev) => {
-      const existingIdx = prev.findIndex((t) => t.teamNumber === teamNum);
-      const isRegistered = true;
-      const submittedAt = Date.now();
-      if (existingIdx !== -1) {
-        const copy = [...prev];
-        const updated: TeamActivity = {
-          ...copy[existingIdx],
-          ...updatedFields,
-          isRegistered,
-          submittedAt: copy[existingIdx].submittedAt || submittedAt,
-        };
-        copy[existingIdx] = updated;
-        updateTeamInFirebase(sessionId, updated).catch(() => {});
-        return copy;
-      } else {
-        const newTeam: TeamActivity = {
-          ...createDefaultTeam(teamNum),
-          ...updatedFields,
-          isRegistered,
-          submittedAt,
-        };
-        updateTeamInFirebase(sessionId, newTeam).catch(() => {});
-        return [...prev, newTeam];
-      }
-    });
+  const handleUpdateTeamInfo = async (teamNum: number, updatedFields: Partial<TeamActivity>): Promise<boolean> => {
+    const current = teams.find(t => t.teamNumber === teamNum) || createDefaultTeam(teamNum);
+    const updated: TeamActivity = {
+      ...current,
+      ...updatedFields,
+      submittedAt: current.submittedAt || Date.now(),
+    };
+    try {
+      await updateTeamInFirebase(sessionId, updated);
+      setTeams(prev => prev.some(t => t.teamNumber === teamNum)
+        ? prev.map(t => t.teamNumber === teamNum ? updated : t)
+        : [...prev, updated]);
+      setIsFirebaseConnected(true);
+      return true;
+    } catch (error) {
+      console.warn('Team save failed:', error);
+      setIsFirebaseConnected(false);
+      return false;
+    }
   };
 
   // Admin: Toggle Voting Status
@@ -707,10 +654,25 @@ export default function App() {
     } catch (e) {}
   };
 
-  // Admin: Reset Data to clean initial state
+  // Instructor: reset only student records; datasets and course materials stay intact.
   const handleResetData = async () => {
-    if (window.confirm('모든 제출물과 점수를 초기화하고 첫 화면 상태로 리셋하시겠습니까?')) {
-      setSubmissions(INITIAL_SUBMISSIONS);
+    if (!window.confirm(`현재 차수(${sessionId})의 수강생 제출물·팀 정보·투표만 초기화합니다. 데이터셋은 유지합니다. 계속하시겠습니까?`)) return;
+    try {
+      const reset = await resetStudentDataInFirebase(sessionId, async backup => {
+        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `student-backup-${sessionId}-${Date.now()}.json`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        return window.prompt('백업 파일 저장을 확인한 뒤 초기화할 차수 ID를 정확히 입력하세요.', '') === sessionId;
+      });
+      if (!reset) return;
+      submissionsRef.current = [];
+      setSubmissions([]);
       setTeams(INITIAL_15_TEAMS);
       localStorage.removeItem('semiconductor_mfg_v1_submissions');
       localStorage.removeItem('semiconductor_mfg_v1_teams');
@@ -721,9 +683,12 @@ export default function App() {
       localStorage.removeItem('llm_hackathon_voted_ids');
       localStorage.removeItem(voteCacheKey(sessionId));
       setVotedIds(new Set());
-      try {
-        await fetch('/api/admin/reset', { method: 'POST' });
-      } catch (e) {}
+      setIsFirebaseConnected(true);
+      alert('Firebase 수강생 데이터 초기화가 완료되었습니다. 실습 데이터셋은 유지되었습니다.');
+    } catch (error) {
+      console.error('Student data reset failed:', error);
+      setIsFirebaseConnected(false);
+      alert('Firebase 초기화에 실패했습니다. 기존 데이터는 유지되었습니다. 연결 또는 사용량 한도를 확인하세요.');
     }
   };
 
@@ -1051,7 +1016,7 @@ export default function App() {
         datasetsCount={datasets.length}
         isConnected={isFirebaseConnected}
         onForceSync={() => {
-          testConnection().then((ok) => setIsFirebaseConnected(ok));
+          setSyncRevision(value => value + 1);
         }}
       />
     </div>

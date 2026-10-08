@@ -13,6 +13,7 @@ import {
   updateDoc,
   writeBatch,
   getDocs,
+  getDocsFromServer,
   getDocFromServer,
   onSnapshot,
   query,
@@ -26,6 +27,7 @@ import {
   TrainingSessionConfig,
 } from '../types';
 import { upgradeShippedManufacturingDataset } from '../data/sampleDatasets';
+import { createDefaultTeam } from '../data/teamData';
 
 export const DEFAULT_SESSION_ID = '2026onboarding';
 
@@ -108,7 +110,9 @@ export function subscribeToSubmissions(
   const q = query(collection(db, path));
   return onSnapshot(
     q,
+    { includeMetadataChanges: true },
     (snapshot) => {
+      if (snapshot.metadata.hasPendingWrites) return;
       const items: CodeSubmission[] = [];
       snapshot.forEach((docSnap) => {
         items.push({ ...(docSnap.data() as CodeSubmission), id: docSnap.id });
@@ -131,7 +135,9 @@ export function subscribeToTeams(
   const q = query(collection(db, path), orderBy('teamNumber', 'asc'));
   return onSnapshot(
     q,
+    { includeMetadataChanges: true },
     (snapshot) => {
+      if (snapshot.metadata.hasPendingWrites) return;
       const items: TeamActivity[] = [];
       snapshot.forEach((docSnap) => {
         items.push({ ...(docSnap.data() as TeamActivity), id: docSnap.id });
@@ -205,11 +211,17 @@ function cleanForFirestore<T extends Record<string, any>>(obj: T): any {
 // Writers
 export async function saveSubmissionToFirebase(
   sessionId: string = DEFAULT_SESSION_ID,
-  submission: CodeSubmission
+  submission: CodeSubmission,
+  team?: TeamActivity
 ) {
   const path = `sessions/${sessionId}/submissions`;
   try {
-    await setDoc(doc(db, path, submission.id), cleanForFirestore(submission), { merge: true });
+    const batch = writeBatch(db);
+    batch.set(doc(db, path, submission.id), cleanForFirestore(submission), { merge: true });
+    if (team) {
+      batch.set(doc(db, `sessions/${sessionId}/teams`, team.id), cleanForFirestore(team), { merge: true });
+    }
+    await batch.commit();
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${path}/${submission.id}`);
     throw error;
@@ -240,6 +252,41 @@ export async function saveDatasetToFirebase(
     handleFirestoreError(error, OperationType.WRITE, `${path}/${dataset.id}`);
     throw error;
   }
+}
+
+// Read from the server before resetting so a quota/offline error cannot erase unbacked-up records.
+export async function resetStudentDataInFirebase(
+  sessionId: string,
+  onBackupReady: (backup: object) => Promise<boolean>
+) {
+  const root = `sessions/${sessionId}`;
+  const [submissions, teams, votes] = await Promise.all([
+    getDocsFromServer(collection(db, `${root}/submissions`)),
+    getDocsFromServer(collection(db, `${root}/teams`)),
+    getDocsFromServer(collection(db, `${root}/votes`)),
+  ]);
+  const defaultTeams = Array.from({ length: 32 }, (_, i) => createDefaultTeam(i + 1));
+  const defaultIds = new Set(defaultTeams.map(team => team.id));
+  const extraTeams = teams.docs.filter(item => !defaultIds.has(item.id));
+  if (submissions.size + votes.size + extraTeams.length + 32 > 500) {
+    throw new Error('초기화할 기록이 500건을 넘어 안전한 일괄 초기화를 할 수 없습니다. 관리자에게 문의하세요.');
+  }
+  const backup = {
+    sessionId,
+    exportedAt: new Date().toISOString(),
+    submissions: submissions.docs.map(item => ({ id: item.id, ...item.data() })),
+    teams: teams.docs.map(item => ({ id: item.id, ...item.data() })),
+    votes: votes.docs.map(item => ({ id: item.id, ...item.data() })),
+  };
+  if (!await onBackupReady(backup)) return false;
+
+  const batch = writeBatch(db);
+  submissions.docs.forEach(item => batch.delete(item.ref));
+  votes.docs.forEach(item => batch.delete(item.ref));
+  extraTeams.forEach(item => batch.delete(item.ref));
+  defaultTeams.forEach(team => batch.set(doc(db, `${root}/teams`, team.id), cleanForFirestore(team)));
+  await batch.commit();
+  return true;
 }
 
 export async function deleteDatasetFromFirebase(sessionId: string, datasetId: string) {
@@ -327,6 +374,8 @@ export async function seedSessionIfEmpty(
 ) {
   const path = `sessions/${sessionId}`;
   try {
+    const sessionSnap = await getDocFromServer(doc(db, path));
+    if (sessionSnap.data()?.teamsSeeded) return;
     const teamsSnap = await getDocs(collection(db, `${path}/teams`));
     if (teamsSnap.empty) {
       console.log(`[Firebase] Initializing ${sessionId} data in Firestore...`);
@@ -336,6 +385,7 @@ export async function seedSessionIfEmpty(
         sessionId,
         trainingTitle: initialConfig.trainingTitle,
         sessionConfig: initialConfig,
+        teamsSeeded: true,
         updatedAt: new Date().toISOString(),
       }, { merge: true });
       for (const t of initialTeams) {
@@ -349,6 +399,8 @@ export async function seedSessionIfEmpty(
       }
       await batch.commit();
       console.log(`[Firebase] ${sessionId} seeding completed.`);
+    } else {
+      await setDoc(doc(db, path), { teamsSeeded: true }, { merge: true });
     }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
