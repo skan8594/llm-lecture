@@ -405,7 +405,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased">
       {/* ================= TOP HEADER ================= */}
       <header className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-2.5 shadow-md">
-        <div className="max-w-5xl mx-auto flex items-center justify-between gap-3">
+        <div className="max-w-5xl mx-auto flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-3">
           {/* Team Identity Banner */}
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white font-black text-sm flex items-center justify-center shadow-md shadow-indigo-600/30">
@@ -427,11 +427,11 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
           </div>
 
           {/* Status and Firebase Pill */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             {onOpenFirebaseModal && (
               <button
                 onClick={onOpenFirebaseModal}
-                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold border rounded-xl transition-all ${firebaseConnected ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30' : 'text-rose-300 bg-rose-500/10 border-rose-500/30'}`}
+                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold whitespace-nowrap border rounded-xl transition-all ${firebaseConnected ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30' : 'text-rose-300 bg-rose-500/10 border-rose-500/30'}`}
                 title="Firebase 2026onboarding 실시간 동기화 상태 확인"
               >
                 <span className="relative flex h-2 w-2">
@@ -447,7 +447,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
                 과제 제출완료
               </span>
             ) : (
-              <span className="px-2.5 py-1 text-xs font-semibold text-amber-400 bg-amber-950/80 border border-amber-800 rounded-xl">
+              <span className="px-2.5 py-1 text-xs font-semibold whitespace-nowrap text-amber-400 bg-amber-950/80 border border-amber-800 rounded-xl">
                 과제 작성 중
               </span>
             )}
