@@ -80,6 +80,19 @@ function parseTeamFromLocation(): number | null {
   return null;
 }
 
+function activeSessionId(): string {
+  if (typeof window === 'undefined') return DEFAULT_SESSION_ID;
+  return new URLSearchParams(window.location.search).get('session')
+    || localStorage.getItem('semiconductor_active_session_id')
+    || DEFAULT_SESSION_ID;
+}
+
+function cachedSessionMatches(): boolean {
+  return (localStorage.getItem('semiconductor_mfg_cache_session_id') || DEFAULT_SESSION_ID) === activeSessionId();
+}
+
+const voteCacheKey = (sessionId: string) => `llm_hackathon_voted_ids_${sessionId}`;
+
 export default function App() {
   // Clear any legacy mock data cached in browser localStorage
   if (typeof window !== 'undefined') {
@@ -109,7 +122,7 @@ export default function App() {
       localStorage.removeItem('llm_hackathon_teams_data');
     } catch (e) {}
 
-    const cached = localStorage.getItem('semiconductor_mfg_v1_submissions');
+    const cached = cachedSessionMatches() ? localStorage.getItem('semiconductor_mfg_v1_submissions') : null;
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
@@ -141,7 +154,7 @@ export default function App() {
 
   // Teams state with LocalStorage persistence (up to 32 teams)
   const [teams, setTeams] = useState<TeamActivity[]>(() => {
-    const cached = localStorage.getItem('semiconductor_mfg_v1_teams');
+    const cached = cachedSessionMatches() ? localStorage.getItem('semiconductor_mfg_v1_teams') : null;
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
@@ -181,6 +194,7 @@ export default function App() {
   // Semiconductor Sample Datasets state with LocalStorage persistence & server sync
   const [datasets, setDatasets] = useState<SampleDataset[]>(() => {
     const defaults = getInitialDatasets();
+    if (!cachedSessionMatches()) return defaults;
     const cachedV3 = localStorage.getItem('semiconductor_mfg_v3_datasets');
     if (cachedV3) {
       try {
@@ -244,15 +258,7 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Active Firebase Session ID (Defaults to 2026onboarding)
-  const [sessionId, setSessionId] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const sessionParam = params.get('session');
-      if (sessionParam) return sessionParam;
-      return localStorage.getItem('semiconductor_active_session_id') || DEFAULT_SESSION_ID;
-    }
-    return DEFAULT_SESSION_ID;
-  });
+  const [sessionId, setSessionId] = useState<string>(activeSessionId);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
   const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState<boolean>(false);
 
@@ -333,21 +339,22 @@ export default function App() {
   // Persist teams and submissions to localStorage for GitHub Pages compatibility
   useEffect(() => {
     try {
+      localStorage.setItem('semiconductor_mfg_cache_session_id', sessionId);
       localStorage.setItem('semiconductor_mfg_v1_submissions', JSON.stringify(submissions));
     } catch (e) {}
-  }, [submissions]);
+  }, [sessionId, submissions]);
 
   useEffect(() => {
     try {
       localStorage.setItem('semiconductor_mfg_v1_teams', JSON.stringify(teams));
     } catch (e) {}
-  }, [teams]);
+  }, [sessionId, teams]);
 
   useEffect(() => {
     try {
       localStorage.setItem('semiconductor_mfg_v3_datasets', JSON.stringify(datasets));
     } catch (e) {}
-  }, [datasets]);
+  }, [sessionId, datasets]);
 
   // Sync datasets from server on load if available
   useEffect(() => {
@@ -377,16 +384,18 @@ export default function App() {
     }
     setVoterToken(token);
 
-    // Load voted ids cache
-    const cachedVoted = localStorage.getItem('llm_hackathon_voted_ids');
-    if (cachedVoted) {
-      try {
-        setVotedIds(new Set(JSON.parse(cachedVoted)));
-      } catch {}
-    }
-
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  useEffect(() => {
+    const cachedVoted = localStorage.getItem(voteCacheKey(sessionId))
+      || (sessionId === DEFAULT_SESSION_ID ? localStorage.getItem('llm_hackathon_voted_ids') : null);
+    try {
+      setVotedIds(new Set(cachedVoted ? JSON.parse(cachedVoted) : []));
+    } catch {
+      setVotedIds(new Set());
+    }
+  }, [sessionId]);
 
   // Fetch submissions and session status from server (if server exists, else gracefully fallback)
   const fetchData = useCallback(async () => {
@@ -443,7 +452,7 @@ export default function App() {
       newVoted.add(voteKey);
     }
     setVotedIds(newVoted);
-    localStorage.setItem('llm_hackathon_voted_ids', JSON.stringify(Array.from(newVoted)));
+    localStorage.setItem(voteCacheKey(sessionId), JSON.stringify(Array.from(newVoted)));
 
     const delta = currentlyVoted ? -1 : 1;
 
@@ -526,7 +535,7 @@ export default function App() {
       newVoted.add(voteKey);
     }
     setVotedIds(newVoted);
-    localStorage.setItem('llm_hackathon_voted_ids', JSON.stringify(Array.from(newVoted)));
+    localStorage.setItem(voteCacheKey(sessionId), JSON.stringify(Array.from(newVoted)));
 
     const delta = currentlyVoted ? -1 : 1;
 
@@ -710,6 +719,7 @@ export default function App() {
       localStorage.removeItem('llm_hackathon_submissions_data');
       localStorage.removeItem('llm_hackathon_teams_data');
       localStorage.removeItem('llm_hackathon_voted_ids');
+      localStorage.removeItem(voteCacheKey(sessionId));
       setVotedIds(new Set());
       try {
         await fetch('/api/admin/reset', { method: 'POST' });
@@ -717,16 +727,23 @@ export default function App() {
     }
   };
 
-  const handleStartNewCohort = () => {
-    if (!window.confirm('현재 차수 데이터를 보관한 뒤 새 차수로 시작하시겠습니까? 기존 데이터는 백업 파일로 남아 있습니다.')) return;
-    const nextSessionId = `cohort-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6)}`;
-    Object.keys(localStorage).filter((key) => key.startsWith('mobile-draft-')).forEach((key) => localStorage.removeItem(key));
+  const switchSession = (nextSessionId: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('session', nextSessionId);
+    window.history.replaceState(window.history.state, '', url.toString());
     setSessionId(nextSessionId);
     localStorage.setItem('semiconductor_active_session_id', nextSessionId);
     setTeams(Array.from({ length: 32 }, (_, i) => createDefaultTeam(i + 1)));
     setSubmissions([]);
     setDatasets(getInitialDatasets());
     setVotedIds(new Set());
+  };
+
+  const handleStartNewCohort = () => {
+    if (!window.confirm('현재 차수 데이터를 보관한 뒤 새 차수로 시작하시겠습니까? 기존 데이터는 백업 파일로 남아 있습니다.')) return;
+    const nextSessionId = `cohort-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6)}`;
+    Object.keys(localStorage).filter((key) => key.startsWith('mobile-draft-')).forEach((key) => localStorage.removeItem(key));
+    switchSession(nextSessionId);
   };
 
   // Instructor: Add new CSV Dataset
@@ -1026,8 +1043,7 @@ export default function App() {
         onClose={() => setIsFirebaseModalOpen(false)}
         sessionId={sessionId}
         onUpdateSessionId={(newId) => {
-          setSessionId(newId);
-          localStorage.setItem('semiconductor_active_session_id', newId);
+          switchSession(newId);
           setIsFirebaseModalOpen(false);
         }}
         submissionsCount={submissions.length}
