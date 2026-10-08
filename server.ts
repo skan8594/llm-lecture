@@ -5,8 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { INITIAL_SUBMISSIONS } from './src/data/seedSubmissions.ts';
-import { getInitialDatasets } from './src/data/sampleDatasets.ts';
-import { CodeSubmission, TrainingSessionConfig, TeamAsset, SampleDataset } from './src/types.ts';
+import { CodeSubmission, TrainingSessionConfig, TeamAsset } from './src/types.ts';
 
 dotenv.config();
 
@@ -30,7 +29,6 @@ let sessionConfig: TrainingSessionConfig = {
 
 let submissions: CodeSubmission[] = [...INITIAL_SUBMISSIONS];
 let teamAssets: Record<number, TeamAsset[]> = {};
-let sampleDatasets: SampleDataset[] = getInitialDatasets();
 
 // Lazy Gemini client helper
 let geminiClient: GoogleGenAI | null = null;
@@ -249,48 +247,6 @@ app.delete('/api/teams/:teamNumber/assets/:assetId', (req, res) => {
   }
 
   res.json({ success: true });
-});
-
-// 10. Datasets: Get all sample CSV datasets
-app.get('/api/datasets', (req, res) => {
-  res.json({ datasets: sampleDatasets });
-});
-
-// 11. Datasets: Add a new sample CSV dataset (Instructor)
-app.post('/api/datasets', (req, res) => {
-  const { title, fileName, description, csvContent, fileSize, rowCount, uploadedBy } = req.body;
-  if (!title || !csvContent) {
-    return res.status(400).json({ error: '제목과 CSV 내용을 모두 입력해주세요.' });
-  }
-
-  const cleanFileName = fileName ? String(fileName).trim() : `${String(title).trim().replace(/\s+/g, '_').toLowerCase()}.csv`;
-  const newDataset: SampleDataset = {
-    id: `dataset-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    title: String(title).trim(),
-    fileName: cleanFileName.endsWith('.csv') ? cleanFileName : `${cleanFileName}.csv`,
-    description: description ? String(description).trim() : '강사 업로드 실습 데이터셋',
-    csvContent: String(csvContent).trim(),
-    fileSize: fileSize || '1.0 KB',
-    rowCount: typeof rowCount === 'number' ? rowCount : 0,
-    uploadedAt: Date.now(),
-    uploadedBy: uploadedBy || '강사',
-  };
-
-  sampleDatasets.unshift(newDataset);
-  res.status(201).json({ success: true, dataset: newDataset });
-});
-
-// 12. Datasets: Delete a dataset (Instructor)
-app.delete('/api/datasets/:id', (req, res) => {
-  const { id } = req.params;
-  sampleDatasets = sampleDatasets.filter((d) => d.id !== id);
-  res.json({ success: true });
-});
-
-// 13. Datasets: Reset to initial sample datasets
-app.post('/api/datasets/reset', (req, res) => {
-  sampleDatasets = getInitialDatasets();
-  res.json({ success: true, datasets: sampleDatasets });
 });
 
 // 7. Gemini API: Generate productivity code helper for participants

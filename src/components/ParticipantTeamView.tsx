@@ -35,6 +35,7 @@ import { ParticipantDatasetList } from './ParticipantDatasetList';
 import { SampleWaferDashboard } from './SampleWaferDashboard';
 import { CurriculumManager } from './CurriculumManager';
 import { formatTeamName, formatTeamHandle } from '../utils/teamUtils';
+import { projectStorageKey } from '../utils/projectStorage';
 
 interface ParticipantTeamViewProps {
   team: TeamActivity;
@@ -147,7 +148,7 @@ export const ParticipantTeamView: React.FC<ParticipantTeamViewProps> = ({
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submissionError, setSubmissionError] = useState('');
   const [showRunnerPreview, setShowRunnerPreview] = useState(false);
-  const draftKey = 'mobile-draft-' + sessionId + '-' + teamNumber;
+  const draftKey = projectStorageKey('mobile-draft-' + sessionId + '-' + teamNumber);
   const [draftReady, setDraftReady] = useState(false);
   const [draftNotice, setDraftNotice] = useState('');
   useEffect(() => {

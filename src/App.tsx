@@ -10,19 +10,15 @@ import { ParticipantTeamView } from './components/ParticipantTeamView';
 import { SubmissionModal } from './components/SubmissionModal';
 import { TeamPresentationStage } from './components/TeamPresentationStage';
 import { INITIAL_15_TEAMS, INITIAL_SUBMISSIONS, createDefaultTeam, isTeamSubmitted } from './data/teamData';
-import { getInitialDatasets, upgradeShippedManufacturingDataset } from './data/sampleDatasets';
+import { getInitialDatasets } from './data/sampleDatasets';
 import { Users, Laptop, ArrowRight, ExternalLink, Sparkles, Database } from 'lucide-react';
 import {
   DEFAULT_SESSION_ID,
   subscribeToSubmissions,
   subscribeToTeams,
-  subscribeToDatasets,
   subscribeToSessionConfig,
   saveSubmissionToFirebase,
   updateTeamInFirebase,
-  saveDatasetToFirebase,
-  seedManufacturingDatasetsIfNeeded,
-  deleteDatasetFromFirebase,
   recordVoteInFirebase,
   updateSessionConfigInFirebase,
   seedSessionIfEmpty,
@@ -31,6 +27,7 @@ import {
 } from './utils/firebase';
 import { FirebaseStatusModal } from './components/FirebaseStatusModal';
 import { getTeamNumber } from './utils/teamUtils';
+import { projectStorageKey } from './utils/projectStorage';
 
 // Helper to parse team from URL:
 // ?team=0 -> Presenter (강사용)
@@ -85,25 +82,17 @@ function parseTeamFromLocation(): number | null {
 function activeSessionId(): string {
   if (typeof window === 'undefined') return DEFAULT_SESSION_ID;
   return new URLSearchParams(window.location.search).get('session')
-    || localStorage.getItem('semiconductor_active_session_id')
+    || localStorage.getItem(projectStorageKey('semiconductor_active_session_id'))
     || DEFAULT_SESSION_ID;
 }
 
 function cachedSessionMatches(): boolean {
-  return (localStorage.getItem('semiconductor_mfg_cache_session_id') || DEFAULT_SESSION_ID) === activeSessionId();
+  return (localStorage.getItem(projectStorageKey('semiconductor_mfg_cache_session_id')) || DEFAULT_SESSION_ID) === activeSessionId();
 }
 
-const voteCacheKey = (sessionId: string) => `llm_hackathon_voted_ids_${sessionId}`;
+const voteCacheKey = (sessionId: string) => projectStorageKey(`llm_hackathon_voted_ids_${sessionId}`);
 
 export default function App() {
-  // Clear any legacy mock data cached in browser localStorage
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.removeItem('llm_hackathon_submissions_data');
-      localStorage.removeItem('llm_hackathon_teams_data');
-    } catch (e) {}
-  }
-
   // URL-based Team Routing: 0 = Presenter (강사용 team0), 1..15 = Participant (1조..15조 team1..15), null = Team Selector
   const [currentTeamNumber, setCurrentTeamNumber] = useState<number | null>(parseTeamFromLocation);
 
@@ -116,15 +105,7 @@ export default function App() {
 
   // Submissions state with LocalStorage persistence for GitHub Pages static environment
   const [submissions, setSubmissions] = useState<CodeSubmission[]>(() => {
-    // Clear legacy keys if present
-    try {
-      localStorage.removeItem('llm_hackathon_v2_submissions');
-      localStorage.removeItem('llm_hackathon_v2_teams');
-      localStorage.removeItem('llm_hackathon_submissions_data');
-      localStorage.removeItem('llm_hackathon_teams_data');
-    } catch (e) {}
-
-    const cached = cachedSessionMatches() ? localStorage.getItem('semiconductor_mfg_v1_submissions') : null;
+    const cached = cachedSessionMatches() ? localStorage.getItem(projectStorageKey('semiconductor_mfg_v1_submissions')) : null;
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
@@ -156,7 +137,7 @@ export default function App() {
 
   // Teams state with LocalStorage persistence (up to 32 teams)
   const [teams, setTeams] = useState<TeamActivity[]>(() => {
-    const cached = cachedSessionMatches() ? localStorage.getItem('semiconductor_mfg_v1_teams') : null;
+    const cached = cachedSessionMatches() ? localStorage.getItem(projectStorageKey('semiconductor_mfg_v1_teams')) : null;
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
@@ -193,50 +174,8 @@ export default function App() {
     return INITIAL_15_TEAMS;
   });
 
-  // Semiconductor Sample Datasets state with LocalStorage persistence & server sync
-  const [datasets, setDatasets] = useState<SampleDataset[]>(() => {
-    const defaults = getInitialDatasets();
-    if (!cachedSessionMatches()) return defaults;
-    const cachedV3 = localStorage.getItem('semiconductor_mfg_v3_datasets');
-    if (cachedV3) {
-      try {
-        const parsed = JSON.parse(cachedV3);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const cached = parsed.map((item: SampleDataset) => upgradeShippedManufacturingDataset(item, defaults));
-          // Early cohort seeding saved only the three manufacturing examples before failing.
-          if (cached.length === 3 && cached.every((item: SampleDataset) => item.id.startsWith('dataset-manufacturing-'))) {
-            return [...defaults.filter(item => !item.id.startsWith('dataset-manufacturing-')), ...cached];
-          }
-          return cached;
-        }
-      } catch (e) {}
-    }
-    const cachedV2 = localStorage.getItem('semiconductor_mfg_v2_datasets');
-    if (cachedV2) {
-      try {
-        const parsed = JSON.parse(cachedV2);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const existingIds = new Set(parsed.map((item: SampleDataset) => item.id));
-          return [
-            ...parsed.map((item: SampleDataset) => upgradeShippedManufacturingDataset(item, defaults)),
-            ...defaults.filter(item => item.id.startsWith('dataset-manufacturing-') && !existingIds.has(item.id)),
-          ];
-        }
-      } catch (e) {}
-    }
-    const cachedV1 = localStorage.getItem('semiconductor_mfg_v1_datasets');
-    if (cachedV1) {
-      try {
-        const parsed = JSON.parse(cachedV1);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const defaultIds = new Set(defaults.map((d) => d.id));
-          const customAdded = parsed.filter((item: SampleDataset) => !defaultIds.has(item.id) && !item.id.startsWith('dataset-wafer-defect'));
-          return [...defaults, ...customAdded];
-        }
-      } catch (e) {}
-    }
-    return defaults;
-  });
+  // Course datasets are immutable assets in the deployed JavaScript bundle.
+  const [datasets] = useState<SampleDataset[]>(getInitialDatasets);
 
   const [sessionConfig, setSessionConfig] = useState<TrainingSessionConfig>({
     totalTargetTeams: 32,
@@ -271,7 +210,6 @@ export default function App() {
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     let unsubSubs: (() => void) | undefined;
     let unsubTeams: (() => void) | undefined;
-    let unsubDatasets: (() => void) | undefined;
     let unsubConfig: (() => void) | undefined;
     const retryAfterError = () => {
       if (!active) return;
@@ -279,7 +217,7 @@ export default function App() {
       if (!retryTimer) retryTimer = setTimeout(() => setSyncRevision(value => value + 1), 60000);
     };
 
-    testConnection()
+    testConnection(sessionId)
       .then((connected) => {
         if (!active) return;
         setIsFirebaseConnected(connected);
@@ -287,13 +225,11 @@ export default function App() {
           sessionId,
           INITIAL_15_TEAMS,
           INITIAL_SUBMISSIONS,
-          getInitialDatasets(),
           sessionConfig
         );
       })
       .then(() => {
         if (!active) return;
-        const manufacturingDefaults = getInitialDatasets().filter(item => item.id.startsWith('dataset-manufacturing-'));
         unsubSubs = subscribeToSubmissions(sessionId, (remoteSubs) => {
           submissionsRef.current = remoteSubs;
           setSubmissions(remoteSubs);
@@ -323,15 +259,6 @@ export default function App() {
           }
         }, retryAfterError);
 
-        unsubDatasets = subscribeToDatasets(sessionId, (remoteDatasets) => {
-          if (remoteDatasets && remoteDatasets.length > 0) {
-            setDatasets(remoteDatasets.map(item => upgradeShippedManufacturingDataset(item, manufacturingDefaults)));
-          }
-        }, retryAfterError);
-
-        seedManufacturingDatasetsIfNeeded(sessionId, manufacturingDefaults)
-          .catch((err) => console.warn('Manufacturing dataset update notice:', err));
-
         unsubConfig = subscribeToSessionConfig(sessionId, (remoteConfig) => {
           if (remoteConfig) {
             setSessionConfig(remoteConfig);
@@ -348,7 +275,6 @@ export default function App() {
       if (retryTimer) clearTimeout(retryTimer);
       if (unsubSubs) unsubSubs();
       if (unsubTeams) unsubTeams();
-      if (unsubDatasets) unsubDatasets();
       if (unsubConfig) unsubConfig();
     };
   }, [sessionId, syncRevision]);
@@ -356,35 +282,16 @@ export default function App() {
   // Persist teams and submissions to localStorage for GitHub Pages compatibility
   useEffect(() => {
     try {
-      localStorage.setItem('semiconductor_mfg_cache_session_id', sessionId);
-      localStorage.setItem('semiconductor_mfg_v1_submissions', JSON.stringify(submissions));
+      localStorage.setItem(projectStorageKey('semiconductor_mfg_cache_session_id'), sessionId);
+      localStorage.setItem(projectStorageKey('semiconductor_mfg_v1_submissions'), JSON.stringify(submissions));
     } catch (e) {}
   }, [sessionId, submissions]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('semiconductor_mfg_v1_teams', JSON.stringify(teams));
+      localStorage.setItem(projectStorageKey('semiconductor_mfg_v1_teams'), JSON.stringify(teams));
     } catch (e) {}
   }, [sessionId, teams]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('semiconductor_mfg_v3_datasets', JSON.stringify(datasets));
-    } catch (e) {}
-  }, [sessionId, datasets]);
-
-  // Sync datasets from server on load if available
-  useEffect(() => {
-    fetch('/api/datasets')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.datasets && Array.isArray(data.datasets) && data.datasets.length > 0) {
-          const current = getInitialDatasets().filter(item => item.id.startsWith('dataset-manufacturing-'));
-          setDatasets(data.datasets.map((item: SampleDataset) => upgradeShippedManufacturingDataset(item, current)));
-        }
-      })
-      .catch(() => {});
-  }, []);
 
   // Sync with browser navigation & URL changes
   useEffect(() => {
@@ -394,10 +301,10 @@ export default function App() {
     window.addEventListener('popstate', handlePopState);
 
     // Initialize or load voter token
-    let token = localStorage.getItem('llm_hackathon_voter_token');
+    let token = localStorage.getItem(projectStorageKey('llm_hackathon_voter_token'));
     if (!token) {
       token = 'voter-' + Math.random().toString(36).substring(2, 9) + '-' + Date.now().toString(36);
-      localStorage.setItem('llm_hackathon_voter_token', token);
+      localStorage.setItem(projectStorageKey('llm_hackathon_voter_token'), token);
     }
     setVoterToken(token);
 
@@ -405,8 +312,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const cachedVoted = localStorage.getItem(voteCacheKey(sessionId))
-      || (sessionId === DEFAULT_SESSION_ID ? localStorage.getItem('llm_hackathon_voted_ids') : null);
+    const cachedVoted = localStorage.getItem(voteCacheKey(sessionId));
     try {
       setVotedIds(new Set(cachedVoted ? JSON.parse(cachedVoted) : []));
     } catch {
@@ -674,13 +580,8 @@ export default function App() {
       submissionsRef.current = [];
       setSubmissions([]);
       setTeams(INITIAL_15_TEAMS);
-      localStorage.removeItem('semiconductor_mfg_v1_submissions');
-      localStorage.removeItem('semiconductor_mfg_v1_teams');
-      localStorage.removeItem('llm_hackathon_v2_submissions');
-      localStorage.removeItem('llm_hackathon_v2_teams');
-      localStorage.removeItem('llm_hackathon_submissions_data');
-      localStorage.removeItem('llm_hackathon_teams_data');
-      localStorage.removeItem('llm_hackathon_voted_ids');
+      localStorage.removeItem(projectStorageKey('semiconductor_mfg_v1_submissions'));
+      localStorage.removeItem(projectStorageKey('semiconductor_mfg_v1_teams'));
       localStorage.removeItem(voteCacheKey(sessionId));
       setVotedIds(new Set());
       setIsFirebaseConnected(true);
@@ -697,66 +598,16 @@ export default function App() {
     url.searchParams.set('session', nextSessionId);
     window.history.replaceState(window.history.state, '', url.toString());
     setSessionId(nextSessionId);
-    localStorage.setItem('semiconductor_active_session_id', nextSessionId);
+    localStorage.setItem(projectStorageKey('semiconductor_active_session_id'), nextSessionId);
     setTeams(Array.from({ length: 32 }, (_, i) => createDefaultTeam(i + 1)));
     setSubmissions([]);
-    setDatasets(getInitialDatasets());
     setVotedIds(new Set());
   };
 
   const handleStartNewCohort = () => {
     if (!window.confirm('현재 차수 데이터를 보관한 뒤 새 차수로 시작하시겠습니까? 기존 데이터는 백업 파일로 남아 있습니다.')) return;
     const nextSessionId = `cohort-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6)}`;
-    Object.keys(localStorage).filter((key) => key.startsWith('mobile-draft-')).forEach((key) => localStorage.removeItem(key));
     switchSession(nextSessionId);
-  };
-
-  // Instructor: Add new CSV Dataset
-  const handleAddDataset = async (newDatasetData: Omit<SampleDataset, 'id' | 'uploadedAt'>) => {
-    const localId = `dataset-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const localItem: SampleDataset = {
-      ...newDatasetData,
-      id: localId,
-      uploadedAt: Date.now(),
-    };
-    setDatasets((prev) => [localItem, ...prev]);
-    saveDatasetToFirebase(sessionId, localItem).catch(() => {});
-
-    try {
-      const res = await fetch('/api/datasets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newDatasetData),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.dataset) {
-          setDatasets((prev) => prev.map((d) => (d.id === localId ? data.dataset : d)));
-        }
-      }
-    } catch (err) {
-      console.warn('Dataset API sync fallback:', err);
-    }
-  };
-
-  // Instructor: Delete Dataset
-  const handleDeleteDataset = async (id: string) => {
-    setDatasets((prev) => prev.filter((d) => d.id !== id));
-    deleteDatasetFromFirebase(sessionId, id).catch((err) => console.warn('Dataset Firebase delete notice:', err));
-    try {
-      await fetch(`/api/datasets/${id}`, { method: 'DELETE' });
-    } catch (err) {
-      console.warn('Dataset delete API fallback:', err);
-    }
-  };
-
-  // Instructor: Reset Datasets to initial semiconductor sample datasets
-  const handleResetDatasets = async () => {
-    const defaults = getInitialDatasets();
-    setDatasets(defaults);
-    try {
-      await fetch('/api/datasets/reset', { method: 'POST' });
-    } catch (err) {}
   };
 
   // Export JSON for GitHub Pages offline/static backup
@@ -839,9 +690,6 @@ export default function App() {
           teams={teams}
           submissions={submissions}
           datasets={datasets}
-          onAddDataset={handleAddDataset}
-          onDeleteDataset={handleDeleteDataset}
-          onResetDatasets={handleResetDatasets}
           onSelectSubmission={(sub) => setSelectedSubmission(sub)}
           onVote={handleVote}
           onVoteTeam={handleScoreTeam}
@@ -859,6 +707,7 @@ export default function App() {
         />
       ) : currentTeamNumber !== null && currentTeamNumber >= 1 ? (
         <ParticipantTeamView
+          key={`${sessionId}-${currentTeamNumber}`}
           teamNumber={currentTeamNumber}
           team={
             teams.find((t) => t.teamNumber === currentTeamNumber) ||

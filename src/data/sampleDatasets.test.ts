@@ -1,8 +1,21 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { getInitialDatasets, upgradeShippedManufacturingDataset } from './sampleDatasets';
 
 const manufacturing = getInitialDatasets().filter(item => item.id.startsWith('dataset-manufacturing-'));
+
+test('all 11 static datasets stay stable, including the original yield and FEM examples', () => {
+  const first = getInitialDatasets();
+  const second = getInitialDatasets();
+  assert.equal(first.length, 11);
+  assert.deepEqual(first.map(item => [item.id, item.csvContent]), second.map(item => [item.id, item.csvContent]));
+  assert.ok(first.some(item => item.id === 'dataset-eds-probe-bin'));
+  const fem = first.find(item => item.id === 'dataset-litho-fem-cd');
+  assert.ok(fem);
+  assert.equal(fem.rowCount, 125);
+  assert.equal(createHash('sha256').update(fem.csvContent).digest('hex'), '041741f56b7a5714d34f39652be8bf6d90b5e33bc4e3e37f0d498238fca99a84');
+});
 
 function recordsFor(id: string) {
   const dataset = manufacturing.find(item => item.id === id);

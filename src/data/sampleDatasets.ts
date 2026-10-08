@@ -1,4 +1,5 @@
 import { SampleDataset } from '../types';
+import { lithoFemCsv } from './lithoFemCsv';
 
 export function calculateCsvStats(csvText: string): { rowCount: number; fileSize: string } {
   const lines = csvText.trim().split(/\r?\n/).filter((line) => line.trim().length > 0);
@@ -133,50 +134,6 @@ function generateLithoOverlayCsv(): string {
       rows.push(
         `LOT-2026-PH01,${waferNo},${s.x},${s.y},${p},${targetLayer},${refLayer},${dx},${dy},${totalVector},${specLimit.toFixed(2)},${(dx * 0.12).toFixed(2)},${(dy * 0.11).toFixed(2)},0.85,1.20,0.12,-0.05,${verdict}`
       );
-    });
-  });
-
-  return rows.join('\n');
-}
-
-// 3. 노광 초점-도즈 매트릭스(FEM) & 임계선폭(CD) 계측 데이터 (125행)
-function generateLithoFemCdCsv(): string {
-  const header = 'wafer_id,shot_row,shot_col,focus_offset_um,dose_energy_mj,target_cd_nm,measured_cd_nm,cd_bias_nm,iso_dense_bias_nm,side_wall_angle_deg,process_window_status';
-  const rows: string[] = [header];
-  const focusList = [-0.20, -0.10, 0.00, 0.10, 0.20]; // 5 focus offsets
-  const doseList = [18.0, 19.5, 21.0, 22.5, 24.0];    // 5 dose energies
-  const shotCoords = [
-    { row: -2, col: -2 }, { row: -1, col: 0 }, { row: 0, col: 0 }, { row: 1, col: 0 }, { row: 2, col: 2 }
-  ]; // 5 repeat shots = 5 * 5 * 5 = 125 rows
-
-  const targetCd = 28.0;
-
-  shotCoords.forEach((coord, coordIdx) => {
-    focusList.forEach((focus) => {
-      doseList.forEach((dose) => {
-        // CD increases with lower dose, degrades with high focus offset
-        const focusPenalty = Math.abs(focus) * 12.0;
-        const doseEffect = (21.0 - dose) * 1.8;
-        const shotVariation = (coordIdx - 2) * 0.2;
-        const measured = Number((targetCd + doseEffect + focusPenalty + shotVariation).toFixed(2));
-        const cdBias = Number((measured - targetCd).toFixed(2));
-        const isoDenseBias = Number((1.2 + Math.abs(focus) * 4.0 + Math.random() * 0.3).toFixed(2));
-        const sideWallAngle = Number((89.5 - Math.abs(focus) * 18.0 - (dose - 21.0) * 0.5).toFixed(1));
-
-        let status = 'OPTIMAL';
-        if (Math.abs(cdBias) <= 0.5 && Math.abs(focus) <= 0.05) {
-          status = 'BEST_FOCUS_DOSE';
-        } else if (Math.abs(cdBias) > 3.0 || sideWallAngle < 85.0) {
-          status = 'OUT_OF_WINDOW';
-        } else if (Math.abs(cdBias) > 1.5) {
-          status = 'MARGINAL';
-        }
-
-        const waferId = `WFR-FEM-${String(coordIdx + 1).padStart(2, '0')}`;
-        rows.push(
-          `${waferId},${coord.row},${coord.col},${focus.toFixed(2)},${dose.toFixed(1)},${targetCd.toFixed(1)},${measured},${cdBias > 0 ? '+' : ''}${cdBias},${isoDenseBias},${sideWallAngle},${status}`
-        );
-      });
     });
   });
 
@@ -576,7 +533,7 @@ function generateProductionTrendCsv(): string {
 export function getInitialDatasets(): SampleDataset[] {
   const waferCsv = generateWafer300mmDefectsCsv();
   const overlayCsv = generateLithoOverlayCsv();
-  const femCsv = generateLithoFemCdCsv();
+  const femCsv = lithoFemCsv;
   const edsCsv = generateEdsProbeBinCsv();
   const rsCsv = generateIonImplantRsCsv();
   const fdcCsv = generateEtchFdcCsv();

@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test:datasets": "tsx --test src/data/sampleDatasets.test.ts"
+    "test:datasets": "tsx --test src/data/sampleDatasets.test.ts",
+    "test:course": "tsx --test src/data/publishedModules.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

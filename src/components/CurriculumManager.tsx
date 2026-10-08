@@ -32,10 +32,12 @@ import {
   PlusCircle,
 } from 'lucide-react';
 import { CurriculumSession, CurriculumCategory, LectureMaterial } from '../types';
-import { DEFAULT_CURRICULUM_SESSIONS, OPTIONAL_CURRICULUM_SESSIONS, DEFAULT_LECTURE_MATERIALS } from '../data/curriculumData';
+import { DEFAULT_CURRICULUM_SESSIONS, DEFAULT_LECTURE_MATERIALS } from '../data/curriculumData';
+import { courseModules, publicationState, visibleModules } from '../data/publishedModules';
 import { db } from '../utils/firebase';
+import { projectStorageKey } from '../utils/projectStorage';
 import { upgradeCurriculum } from '../data/upgradeCurriculum';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, getDocFromServer, onSnapshot, setDoc } from 'firebase/firestore';
 
 interface CurriculumManagerProps {
   sessionId?: string;
@@ -63,7 +65,7 @@ interface SessionFormData {
 }
 
 export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
-  sessionId = new URLSearchParams(window.location.search).get('session') || localStorage.getItem('semiconductor_active_session_id') || '2026onboarding',
+  sessionId = new URLSearchParams(window.location.search).get('session') || '2026onboarding',
   sessions: propSessions,
   onUpdateSessions,
   materials: propMaterials,
@@ -74,6 +76,7 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
 }) => {
   // Local state initialized with props or localStorage or defaults
   const [sessions, setSessions] = useState<CurriculumSession[]>(() => {
+    if (readOnly) return [];
     if (propSessions && propSessions.length > 0) return upgradeCurriculum(propSessions);
     try {
       const saved = localStorage.getItem(STORAGE_KEY_SESSIONS);
@@ -269,9 +272,9 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
   const [shareNotice, setShareNotice] = useState('');
   const [hideCompleted, setHideCompleted] = useState(() => localStorage.getItem('llm_student_hide_completed') !== 'false');
   const [studentCompleted, setStudentCompleted] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem(`llm_student_completed_${sessionId}`) || '[]'); } catch { return []; }
+    try { return JSON.parse(localStorage.getItem(projectStorageKey(`llm_student_completed_${sessionId}`)) || '[]'); } catch { return []; }
   });
-  const moduleBank = [...DEFAULT_CURRICULUM_SESSIONS, ...OPTIONAL_CURRICULUM_SESSIONS];
+  const moduleBank = courseModules;
   const selectedMinutes = sessions.reduce((total, s) => total + s.durationMinutes, 0);
   const toggleModule = (module: CurriculumSession) => {
     if (sessions.length === 1 && sessions[0].id === module.id) {
@@ -288,13 +291,12 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
   };
   useEffect(() => {
     if (!readOnly) return;
-    setSessions(DEFAULT_CURRICULUM_SESSIONS);
+    setSessions([]);
     return onSnapshot(doc(db, 'sessions', sessionId), snapshot => {
-      const shared = snapshot.data()?.publicPrompts;
-      if (Array.isArray(shared)) setSessions(upgradeCurriculum(shared).map((s: any) => ({
-        ...s, category: 'prompting', summary: '', objectives: [], handsOnTasks: [],
-      })));
-    }, () => setShareNotice('공유 연결을 확인해주세요. 기본 예시를 표시합니다.'));
+      const next = visibleModules(snapshot.data()?.openModules);
+      setSessions(next);
+      setShareNotice(next.length ? '' : '강사가 공개한 프롬프트가 없습니다.');
+    }, () => setShareNotice('공개 상태를 확인할 수 없습니다. 연결을 확인해주세요.'));
   }, [readOnly, sessionId]);
   const publishPrompts = async () => {
     if (!sessions.length) { setShareNotice('공개할 모듈을 하나 이상 선택하세요.'); return; }
@@ -304,13 +306,15 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
       return;
     }
     try {
-      await setDoc(doc(db, 'sessions', sessionId), {
-        publicPrompts: sessions.map(({ id, title, recommendedPrompts, isCompleted }) => ({
-          id, title, recommendedPrompts: recommendedPrompts || [], isCompleted: Boolean(isCompleted),
-        })),
-      }, { merge: true });
-      setShareNotice('학생에게 프롬프트 예시를 공개했습니다.');
-    } catch { setShareNotice('공개 실패. 연결 상태를 확인하고 다시 시도하세요.'); }
+      await setDoc(doc(db, 'sessions', sessionId), { openModules: publicationState(sessions) }, { merge: true });
+      setShareNotice('선택한 모듈의 정적 프롬프트를 학생에게 공개했습니다.');
+    } catch (error) { setShareNotice(error instanceof Error && error.message.startsWith('정적 교안') ? `${error.message}. 코드 수정 후 재배포하세요.` : '공개 실패. 연결 상태를 확인하고 다시 시도하세요.'); }
+  };
+  const closePrompts = async () => {
+    try {
+      await setDoc(doc(db, 'sessions', sessionId), { openModules: [] }, { merge: true });
+      setShareNotice('학생용 프롬프트 공개를 중단했습니다.');
+    } catch { setShareNotice('공개 중단에 실패했습니다. 연결 상태를 확인하세요.'); }
   };
 
   // File Upload Handling
@@ -330,17 +334,22 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
     setTimeout(() => setCopiedPromptIndex(null), 2000);
   };
 
-  const handleToggleSessionComplete = (moduleId: string) => {
+  const handleToggleSessionComplete = async (moduleId: string) => {
     if (readOnly) return;
     const next = sessions.map((s) =>
       s.id === moduleId ? { ...s, isCompleted: !s.isCompleted } : s
     );
+    const completed = Boolean(next.find(module => module.id === moduleId)?.isCompleted);
     updateSessions(next);
-    setDoc(doc(db, 'sessions', sessionId), {
-      publicPrompts: next.map(({ id, title, recommendedPrompts, isCompleted }) => ({
-        id, title, recommendedPrompts: recommendedPrompts || [], isCompleted: Boolean(isCompleted),
-      })),
-    }, { merge: true }).catch(() => setShareNotice('완료 상태 공유에 실패했습니다. 연결 상태를 확인하세요.'));
+    try {
+      const sessionRef = doc(db, 'sessions', sessionId);
+      const published = visibleModules((await getDocFromServer(sessionRef)).data()?.openModules);
+      if (published.some(module => module.id === moduleId)) {
+        await setDoc(sessionRef, { openModules: publicationState(published.map(module =>
+          module.id === moduleId ? { ...module, isCompleted: completed } : module
+        )) }, { merge: true });
+      }
+    } catch { setShareNotice('완료 상태 공유에 실패했습니다. 연결 상태를 확인하세요.'); }
   };
 
   // Process uploaded files
@@ -562,7 +571,7 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
       </div>
       <p role="status">{shareNotice}</p>
       {sessions.filter(s => !hideCompleted || (!s.isCompleted && !studentCompleted.includes(s.id))).map(s => <article key={s.id} className="rounded-xl border border-slate-700 p-4 space-y-3">
-        <div className="flex items-start justify-between gap-3"><h3 className="font-bold">{s.title}</h3><button className="min-h-11 px-3 rounded-lg border border-emerald-700 text-emerald-300 text-xs" onClick={() => { const next = studentCompleted.includes(s.id) ? studentCompleted.filter(id => id !== s.id) : [...studentCompleted, s.id]; setStudentCompleted(next); localStorage.setItem(`llm_student_completed_${sessionId}`, JSON.stringify(next)); }}>{studentCompleted.includes(s.id) ? '완료 취소' : '학습 완료'}</button></div>
+        <div className="flex items-start justify-between gap-3"><h3 className="font-bold">{s.title}</h3><button className="min-h-11 px-3 rounded-lg border border-emerald-700 text-emerald-300 text-xs" onClick={() => { const next = studentCompleted.includes(s.id) ? studentCompleted.filter(id => id !== s.id) : [...studentCompleted, s.id]; setStudentCompleted(next); localStorage.setItem(projectStorageKey(`llm_student_completed_${sessionId}`), JSON.stringify(next)); }}>{studentCompleted.includes(s.id) ? '완료 취소' : '학습 완료'}</button></div>
         {(s.recommendedPrompts || []).map((p, i) => <div key={i} className="space-y-2">
           <p className="text-base whitespace-pre-wrap">{p}</p>
           <button className="min-h-11 px-4 bg-indigo-600 rounded-lg" onClick={async () => {
@@ -593,7 +602,11 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
         </div>
         <p>에이전트 실습은 ① 설계 → ② HTML 구현 → ③ 실패·수정·재검증 순서로 선택하세요. 각 모듈의 상세 내용은 아래 타임라인에서 확인할 수 있습니다.</p>
       </section>
-      <button onClick={publishPrompts} className="min-h-11 px-4 bg-indigo-600 rounded-lg">학생에게 현재 프롬프트 공개</button>
+      <p className="text-sm text-slate-300">학생용 프롬프트 본문은 사이트에 고정되어 있습니다. 이 버튼은 선택한 모듈과 완료 상태만 공유합니다. 내용 변경은 코드 수정 후 재배포해야 합니다.</p>
+      <div className="flex flex-wrap gap-2">
+        <button onClick={publishPrompts} className="min-h-11 px-4 bg-indigo-600 rounded-lg">선택 모듈 학생에게 공개</button>
+        <button onClick={closePrompts} className="min-h-11 px-4 border border-slate-600 rounded-lg">학생 공개 중단</button>
+      </div>
       <p role="status">{shareNotice}</p>
       {/* Hidden File Input */}
       <input
@@ -1445,7 +1458,7 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
                     {editingSessionId ? '교육 모듈 내용 수정' : '새로운 교육 모듈 추가'}
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    모듈의 제목, 소요 시간, 학습 목표, 실습 과제 및 추천 프롬프트를 자유롭게 편집하세요.
+                    이 편집은 강사 브라우저의 수업 초안입니다. 학생용 프롬프트는 코드 수정·재배포 후 반영됩니다.
                   </p>
                 </div>
               </div>
@@ -1641,7 +1654,7 @@ export const CurriculumManager: React.FC<CurriculumManagerProps> = ({
                 <div className="flex items-center justify-between">
                   <label className="font-bold text-amber-300 flex items-center gap-1.5">
                     <Copy className="w-3.5 h-3.5" />
-                    <span>추천 프롬프트 템플릿 (선택 사항)</span>
+                    <span>추천 프롬프트 초안 (학생 공개본과 별도)</span>
                   </label>
                   <button
                     type="button"

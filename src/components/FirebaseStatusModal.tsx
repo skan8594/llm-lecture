@@ -48,8 +48,8 @@ export const FirebaseStatusModal: React.FC<FirebaseStatusModalProps> = ({
     setTesting(true);
     setTestResult(null);
     try {
-      const ok = await testConnection();
-      setTestResult(ok ? '성공: Firestore 실시간 연결 및 세션 데이터 읽기 가능' : '연결 확인 완료 (로컬 캐시 및 Firestore 활성화됨)');
+      const ok = await testConnection(sessionId);
+      setTestResult(ok ? '성공: 현재 차수의 Firestore 데이터 읽기 가능' : 'Firestore 연결 실패: 저장 및 실시간 조회를 사용할 수 없습니다.');
     } catch (e: any) {
       setTestResult(`오류: ${e?.message || '연결 점검 중 알 수 없는 문제'}`);
     } finally {
@@ -132,7 +132,7 @@ export const FirebaseStatusModal: React.FC<FirebaseStatusModalProps> = ({
             </div>
           </div>
 
-          {/* Live Data Counts */}
+          {/* Session records and bundled course assets */}
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="p-2.5 bg-slate-950/50 border border-slate-800 rounded-xl">
               <div className="text-slate-400 text-[10px] mb-1 flex items-center justify-center gap-1">
@@ -148,7 +148,7 @@ export const FirebaseStatusModal: React.FC<FirebaseStatusModalProps> = ({
             </div>
             <div className="p-2.5 bg-slate-950/50 border border-slate-800 rounded-xl">
               <div className="text-slate-400 text-[10px] mb-1 flex items-center justify-center gap-1">
-                <Layers className="w-3 h-3 text-cyan-400" /> 데이터셋
+                <Layers className="w-3 h-3 text-cyan-400" /> 정적 교안
               </div>
               <div className="text-base font-black text-white font-mono">{datasetsCount}개</div>
             </div>

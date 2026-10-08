@@ -32,9 +32,6 @@ interface PresenterDashboardProps {
   teams: TeamActivity[];
   submissions: CodeSubmission[];
   datasets?: SampleDataset[];
-  onAddDataset?: (newDataset: Omit<SampleDataset, 'id' | 'uploadedAt'>) => void;
-  onDeleteDataset?: (id: string) => void;
-  onResetDatasets?: () => void;
   onSelectSubmission: (submission: CodeSubmission) => void;
   onVote: (id: string, reactionType?: string) => void;
   onVoteTeam?: (teamId: string) => void;
@@ -55,9 +52,6 @@ export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
   teams,
   submissions,
   datasets = [],
-  onAddDataset,
-  onDeleteDataset,
-  onResetDatasets,
   onSelectSubmission,
   onVote,
   onVoteTeam,
@@ -451,12 +445,7 @@ export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
 
         {/* ================= TAB 5: DATASET MANAGEMENT (CSV) ================= */}
         {activeTab === 'datasets' && (
-          <DatasetManager
-            datasets={datasets}
-            onAddDataset={onAddDataset || (() => {})}
-            onDeleteDataset={onDeleteDataset || (() => {})}
-            onResetDatasets={onResetDatasets || (() => {})}
-          />
+          <DatasetManager datasets={datasets} />
         )}
 
         {/* ================= TAB 6: SAMPLE DELIVERABLE DASHBOARD BENCHMARK ================= */}
@@ -475,7 +464,7 @@ export const PresenterDashboard: React.FC<PresenterDashboardProps> = ({
 
         {/* ================= TAB 7: CURRICULUM & LECTURE MATERIALS ================= */}
         {activeTab === 'curriculum' && (
-          <CurriculumManager />
+          <CurriculumManager sessionId={sessionId} />
         )}
       </main>
     </div>

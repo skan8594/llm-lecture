@@ -9,10 +9,8 @@ import {
   doc,
   collection,
   setDoc,
-  deleteDoc,
   updateDoc,
   writeBatch,
-  getDocs,
   getDocsFromServer,
   getDocFromServer,
   onSnapshot,
@@ -23,11 +21,11 @@ import firebaseConfig from '../../firebase-applet-config.json';
 import {
   CodeSubmission,
   TeamActivity,
-  SampleDataset,
   TrainingSessionConfig,
 } from '../types';
-import { upgradeShippedManufacturingDataset } from '../data/sampleDatasets';
 import { createDefaultTeam } from '../data/teamData';
+import { DEFAULT_CURRICULUM_SESSIONS } from '../data/curriculumData';
+import { publicationState } from '../data/publishedModules';
 
 export const DEFAULT_SESSION_ID = '2026onboarding';
 
@@ -86,10 +84,10 @@ export function handleFirestoreError(
 }
 
 // Test connection on startup as mandated by Firebase Skill
-export async function testConnection(): Promise<boolean> {
+export async function testConnection(sessionId: string = DEFAULT_SESSION_ID): Promise<boolean> {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log('[Firebase] Connected to Firestore (2026onboarding ready)');
+    await getDocFromServer(doc(db, 'sessions', sessionId));
+    console.log(`[Firebase] Connected to Firestore (${sessionId} ready)`);
     return true;
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
@@ -141,29 +139,6 @@ export function subscribeToTeams(
       const items: TeamActivity[] = [];
       snapshot.forEach((docSnap) => {
         items.push({ ...(docSnap.data() as TeamActivity), id: docSnap.id });
-      });
-      onData(items);
-    },
-    (err) => {
-      handleFirestoreError(err, OperationType.LIST, path);
-      if (onError) onError(err);
-    }
-  );
-}
-
-export function subscribeToDatasets(
-  sessionId: string = DEFAULT_SESSION_ID,
-  onData: (datasets: SampleDataset[]) => void,
-  onError?: (err: any) => void
-) {
-  const path = `sessions/${sessionId}/datasets`;
-  const q = query(collection(db, path));
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const items: SampleDataset[] = [];
-      snapshot.forEach((docSnap) => {
-        items.push({ ...(docSnap.data() as SampleDataset), id: docSnap.id });
       });
       onData(items);
     },
@@ -241,19 +216,6 @@ export async function updateTeamInFirebase(
   }
 }
 
-export async function saveDatasetToFirebase(
-  sessionId: string = DEFAULT_SESSION_ID,
-  dataset: SampleDataset
-) {
-  const path = `sessions/${sessionId}/datasets`;
-  try {
-    await setDoc(doc(db, path, dataset.id), dataset, { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `${path}/${dataset.id}`);
-    throw error;
-  }
-}
-
 // Read from the server before resetting so a quota/offline error cannot erase unbacked-up records.
 export async function resetStudentDataInFirebase(
   sessionId: string,
@@ -287,37 +249,6 @@ export async function resetStudentDataInFirebase(
   defaultTeams.forEach(team => batch.set(doc(db, `${root}/teams`, team.id), cleanForFirestore(team)));
   await batch.commit();
   return true;
-}
-
-export async function deleteDatasetFromFirebase(sessionId: string, datasetId: string) {
-  const path = `sessions/${sessionId}/datasets/${datasetId}`;
-  try {
-    await deleteDoc(doc(db, path));
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
-    throw error;
-  }
-}
-
-// Upgrade shipped examples once, preserving instructor edits and deleted pack entries.
-export async function seedManufacturingDatasetsIfNeeded(sessionId: string, datasets: SampleDataset[]) {
-  const sessionPath = `sessions/${sessionId}`;
-  const datasetPath = `${sessionPath}/datasets`;
-  const sessionSnapshot = await getDocFromServer(doc(db, sessionPath));
-  const version = Number(sessionSnapshot.data()?.manufacturingDatasetPackVersion || 0);
-  if (version >= 2) return;
-
-  const existing = new Map((await getDocs(collection(db, datasetPath))).docs.map(item => [item.id, item.data() as SampleDataset]));
-  for (const dataset of datasets) {
-    const stored = existing.get(dataset.id);
-    if (stored) {
-      const upgraded = upgradeShippedManufacturingDataset(stored, datasets);
-      if (upgraded !== stored) await setDoc(doc(db, datasetPath, dataset.id), upgraded);
-    } else if (version === 0) {
-      await setDoc(doc(db, datasetPath, dataset.id), dataset);
-    }
-  }
-  await setDoc(doc(db, sessionPath), { manufacturingDatasetPackVersion: 2 }, { merge: true });
 }
 
 export async function recordVoteInFirebase(
@@ -369,22 +300,21 @@ export async function seedSessionIfEmpty(
   sessionId: string = DEFAULT_SESSION_ID,
   initialTeams: TeamActivity[],
   initialSubmissions: CodeSubmission[],
-  initialDatasets: SampleDataset[],
   initialConfig: TrainingSessionConfig
 ) {
   const path = `sessions/${sessionId}`;
   try {
     const sessionSnap = await getDocFromServer(doc(db, path));
     if (sessionSnap.data()?.teamsSeeded) return;
-    const teamsSnap = await getDocs(collection(db, `${path}/teams`));
+    const teamsSnap = await getDocsFromServer(collection(db, `${path}/teams`));
     if (teamsSnap.empty) {
       console.log(`[Firebase] Initializing ${sessionId} data in Firestore...`);
-      const existingDatasets = new Set((await getDocs(collection(db, `${path}/datasets`))).docs.map(item => item.id));
       const batch = writeBatch(db);
       batch.set(doc(db, path), {
         sessionId,
         trainingTitle: initialConfig.trainingTitle,
         sessionConfig: initialConfig,
+        openModules: publicationState(DEFAULT_CURRICULUM_SESSIONS),
         teamsSeeded: true,
         updatedAt: new Date().toISOString(),
       }, { merge: true });
@@ -393,9 +323,6 @@ export async function seedSessionIfEmpty(
       }
       for (const s of initialSubmissions) {
         batch.set(doc(db, `${path}/submissions`, s.id), s);
-      }
-      for (const d of initialDatasets) {
-        if (!existingDatasets.has(d.id)) batch.set(doc(db, `${path}/datasets`, d.id), d);
       }
       await batch.commit();
       console.log(`[Firebase] ${sessionId} seeding completed.`);
