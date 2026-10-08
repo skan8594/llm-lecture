@@ -11,6 +11,7 @@ import {
   setDoc,
   deleteDoc,
   updateDoc,
+  writeBatch,
   getDocs,
   getDocFromServer,
   onSnapshot,
@@ -329,25 +330,24 @@ export async function seedSessionIfEmpty(
     const teamsSnap = await getDocs(collection(db, `${path}/teams`));
     if (teamsSnap.empty) {
       console.log(`[Firebase] Initializing ${sessionId} data in Firestore...`);
-      // Seed Config
-      await setDoc(doc(db, path), {
+      const existingDatasets = new Set((await getDocs(collection(db, `${path}/datasets`))).docs.map(item => item.id));
+      const batch = writeBatch(db);
+      batch.set(doc(db, path), {
         sessionId,
         trainingTitle: initialConfig.trainingTitle,
         sessionConfig: initialConfig,
         updatedAt: new Date().toISOString(),
-      });
-      // Seed Teams
+      }, { merge: true });
       for (const t of initialTeams) {
-        await setDoc(doc(db, `${path}/teams`, t.id), t);
+        batch.set(doc(db, `${path}/teams`, t.id), cleanForFirestore(t));
       }
-      // Seed Submissions
       for (const s of initialSubmissions) {
-        await setDoc(doc(db, `${path}/submissions`, s.id), s);
+        batch.set(doc(db, `${path}/submissions`, s.id), s);
       }
-      // Seed Datasets
       for (const d of initialDatasets) {
-        await setDoc(doc(db, `${path}/datasets`, d.id), d);
+        if (!existingDatasets.has(d.id)) batch.set(doc(db, `${path}/datasets`, d.id), d);
       }
+      await batch.commit();
       console.log(`[Firebase] ${sessionId} seeding completed.`);
     }
   } catch (error) {

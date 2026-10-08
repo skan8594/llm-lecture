@@ -118,6 +118,8 @@ export default function App() {
     }
     return INITIAL_SUBMISSIONS;
   });
+  const submissionsRef = useRef(submissions);
+  useEffect(() => { submissionsRef.current = submissions; }, [submissions]);
 
   // Normalization helper: ensures unsubmitted teams have no arbitrary category or dummy values
   const sanitizeTeam = (t: TeamActivity, subs: CodeSubmission[]): TeamActivity => {
@@ -184,7 +186,12 @@ export default function App() {
       try {
         const parsed = JSON.parse(cachedV3);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((item: SampleDataset) => upgradeShippedManufacturingDataset(item, defaults));
+          const cached = parsed.map((item: SampleDataset) => upgradeShippedManufacturingDataset(item, defaults));
+          // Early cohort seeding saved only the three manufacturing examples before failing.
+          if (cached.length === 3 && cached.every((item: SampleDataset) => item.id.startsWith('dataset-manufacturing-'))) {
+            return [...defaults.filter(item => !item.id.startsWith('dataset-manufacturing-')), ...cached];
+          }
+          return cached;
         }
       } catch (e) {}
     }
@@ -270,18 +277,14 @@ export default function App() {
       .then(() => {
         const manufacturingDefaults = getInitialDatasets().filter(item => item.id.startsWith('dataset-manufacturing-'));
         unsubSubs = subscribeToSubmissions(sessionId, (remoteSubs) => {
-          if (remoteSubs && remoteSubs.length > 0) {
-            setSubmissions(remoteSubs);
-            setSelectedSubmission((prev) => {
-              if (!prev) return null;
-              return remoteSubs.find((s) => s.id === prev.id) || prev;
-            });
-          }
+          submissionsRef.current = remoteSubs;
+          setSubmissions(remoteSubs);
+          setSelectedSubmission(prev => prev ? remoteSubs.find(s => s.id === prev.id) || null : null);
         });
 
         unsubTeams = subscribeToTeams(sessionId, (remoteTeams) => {
           if (remoteTeams && remoteTeams.length > 0) {
-            const sanitized = remoteTeams.map((t) => sanitizeTeam(t, submissions));
+            const sanitized = remoteTeams.map((t) => sanitizeTeam(t, submissionsRef.current));
             if (sanitized.length < 32) {
               const existingNumbers = new Set(sanitized.map((t) => t.teamNumber));
               const additions: TeamActivity[] = [];
@@ -722,6 +725,7 @@ export default function App() {
     localStorage.setItem('semiconductor_active_session_id', nextSessionId);
     setTeams(Array.from({ length: 32 }, (_, i) => createDefaultTeam(i + 1)));
     setSubmissions([]);
+    setDatasets(getInitialDatasets());
     setVotedIds(new Set());
   };
 
